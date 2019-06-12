@@ -32,6 +32,9 @@ or garbage collection.
  - locking
  - nested forking but not forking in nested scopes
  - access to both local and global variables (annotate in language)
+ - Sprockell multithreading, since the architecture does not support dynamic threading creation
+ - Fork/join model in the architecture, forked thread could be forked again
+ - Look through : WriteInstr, ReadInstr/Receive, and TestAndSet
 
 ### Procedures
  - functions only
