@@ -52,5 +52,5 @@ make code generation easier.
 
 ## Sample programs
  - [Peterson's algorithm](https://en.wikipedia.org/wiki/Peterson%27s_algorithm)
- - ```An elementary banking system, consisting of several processes trying to transfer money simultan- eously. Your implementation should ensure that concurrent transfers do not mess up the state of the bank account.```
+ - ```An elementary banking system, consisting of several processes trying to transfer money simultaneously. Your implementation should ensure that concurrent transfers do not mess up the state of the bank account.```
  
