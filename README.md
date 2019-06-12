@@ -87,19 +87,18 @@ bool: expression ordering expression | identifier;
 
 ordering: LT | LE | EQ | NE | GT | GE;
 
+
+//TODO more work on making this not left-recursive and correctly associative
 expression : term
-     | expression ( '+' | '-' ) term;
+     | term ( '+' | '-' ) expression;
 
 term : factor
-     | term '*' factor;
+     | factor '*' term;
 
 factor : INTEGER | BOOLEAN | array
        | identifier LPAR ((arg ',')* arg) * RPAR
        | identifier
        | '(' expr ')';
-
-
-
 
 ```
 
