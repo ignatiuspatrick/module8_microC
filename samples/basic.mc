@@ -11,7 +11,7 @@ function void main() {
 
     int c = a + b;
     int d = a - b;
-    int e = a * b;
+    int e = a * b + c - d;
 
     boolean f = a > b;
     boolean g = a == b;
@@ -30,6 +30,7 @@ function int doStuff() {
     if (a) {
         z = false;
     }
+
 
     int c = 0;
     while (!z) {
