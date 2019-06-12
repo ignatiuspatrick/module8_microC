@@ -3,7 +3,7 @@ int y = 10;
 boolean z = true;
 
 
-function main() {
+function void main() {
     global x, y;
 
     int a = 0;
