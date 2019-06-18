@@ -13,27 +13,23 @@ import Grammar
 
 -- Programs
 parseProgram = Program <$> (many parseDefinition)
-parseDefinition = FunctionDef <$> parseFunctionDef
-               <|> VariableDef <$> parseVariableDef <* semi
-               <|> GlobalDef <$> parseGlobalDef <* semi
+parseDefinition = FunctionDef <$> parseType <*> identifier <*> parens (commaSep parseParam) <*> (many parseStatement)
+               <|> VariableDef <$> parseType <*> identifier <*> parseExpression <* semi
+               <|> GlobalDef <$> (commaSep identifier) <* semi
 
 -- Variables
-parseVariableDef = Variable <$> parseType <*> identifier <*> parseExpression
-parseGlobalDef = Global <$> (commaSep identifier)
 parseType = (IntType <$> reserved "int") <|> (BoolType <$> reserved "boolean") <|> (VoidType <$> reserved "void")
 
 -- Functions
 parseParam = Param <$> parseType <*> identifier
-parseFunctionDef = Function <$> parseType <*> identifier <*> parens (commaSep parseParam) <*> (many parseStatement)
 
 -- Language
 parseStatement = SmtDef <$> parseDefinition
-              <|> SmtIf <$> reserved "if" *> (parens parseExpression) <*> (braces (many parseStatement)) <* reserved "else" <*> (braces (many parseStatement))
-              <|> SmtWhile <$> reserved "while" *> (parens parseExpression) <*> (braces (many parseStatement))
+              <|> SmtIf <$> (reserved "if" *> (parens parseExpression)) <*> (braces (many parseStatement)) <*> (reserved "else" *> (braces (many parseStatement)))
+              <|> SmtWhile <$> (reserved "while" *> (parens parseExpression)) <*> (braces (many parseStatement))
               <|> SmtRet <$> parseExpression
               <|> SmtAss <$> identifier <* symbol "=" <*> parseExpression
               <|> SmtCall <$> identifier <*> (parens (commaSep parseExpression))
-              <|> SmtExpr <$> parseExpression
 
 
 
@@ -44,9 +40,9 @@ sub' = (\_ -> (ExprSubtract)) <$> symbol "-"
 
 mult' = (\_ -> (ExprMult)) <$> symbol "*"
 
-parseExpression = parseTerm `chainr` add' <|> parseTerm `chainr1` sub'
+parseExpression = parseTerm `chainr1` add' <|> parseTerm `chainr1` sub'
 
-parseTerm = parseFact `chainr` mult'
+parseTerm = parseFact `chainr1` mult'
 
 parseFact = (ExprConst <$> integer)
             <|> try (ExprCall <$> identifier <*> (parens (commaSep parseExpression)))

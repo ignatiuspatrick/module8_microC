@@ -67,30 +67,19 @@ factor : INTEGER | BOOLEAN | array
 data Program = Program [Definition]
                 deriving (Show)
 
-data Definition = FunctionDef
-                | VariableDef
-                | GlobalDef
+data Definition = FunctionDef Type String [Param] [Statement]
+                | VariableDef Type String Expression
+                | GlobalDef [String]
                 deriving (Show)
 
 -- Variables
-data VariableDef = Variable Type String Expression
-                deriving (Show)
-
 data Type = IntType () | BoolType () | VoidType ()
                 deriving (Show)
 
-data GlobalDef = Global [String]
-                deriving (Show)
 
 
 -- Functions
-data FunctionDef = Function RetType String [Param] [Statement]
-                deriving (Show)
-
 data Param = Param Type String
-                deriving (Show)
-
-data RetType = RetType Type
                 deriving (Show)
 
 
@@ -164,5 +153,6 @@ identifier = Token.identifier lexer
 integer = Token.integer lexer
 reserved = Token.reserved lexer
 commaSep = Token.commaSep lexer
+semi = Token.semi lexer
 
 
