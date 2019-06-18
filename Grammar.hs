@@ -64,7 +64,7 @@ factor : INTEGER | BOOLEAN | array
 
 -}
 
-data Program = Program [Definition]
+data Program = Program [Statement]
                 deriving (Show)
 
 data Definition = FunctionDef Type String [Param] [Statement]
@@ -97,6 +97,8 @@ data Order = OrderLT () | OrderLE () | OrderEQ () | OrderNE () | OrderGT () | Or
                 deriving (Show)
 
 data Expression = ExprConst Integer
+          | ExprTrue ()
+          | ExprFalse ()
           | ExprVar String
           | ExprAdd Expression Expression
           | ExprSubtract Expression Expression
