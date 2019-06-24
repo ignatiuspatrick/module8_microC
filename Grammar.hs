@@ -69,18 +69,17 @@ data Program = Program [Statement]
 
 data Definition = FunctionDef Type String [Param] [Statement]
                 | VariableDef Type String Expression
-                | GlobalDef [String]
-                deriving (Show)
+                deriving (Show, Eq)
 
 -- Variables
 data Type = IntType () | BoolType () | VoidType ()
-                deriving (Show)
+                deriving (Show, Eq)
 
 
 
 -- Functions
 data Param = Param Type String
-                deriving (Show)
+                deriving (Show, Eq)
 
 
 -- Language
@@ -90,11 +89,11 @@ data Statement = SmtDef Definition
                | SmtRet Expression
                | SmtAss String Expression
                | SmtCall String [Expression]
-                deriving (Show)
+                deriving (Show, Eq)
 
 
 data Order = OrderLT () | OrderLE () | OrderEQ () | OrderNE () | OrderGT () | OrderGE ()
-                deriving (Show)
+                deriving (Show, Eq)
 
 data Expression = ExprConst Integer
           | ExprTrue ()
@@ -106,7 +105,9 @@ data Expression = ExprConst Integer
           | ExprBrac Expression
           | ExprBool Expression Order Expression
           | ExprCall String [Expression]
-          deriving Show
+          deriving (Show, Eq)
+
+
 
 -- data Expression =
 --                   ExprTerm Term
