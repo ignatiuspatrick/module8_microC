@@ -95,6 +95,9 @@ data Statement = SmtDef Definition
 data Order = OrderLT () | OrderLE () | OrderEQ () | OrderNE () | OrderGT () | OrderGE ()
                 deriving (Show, Eq)
 
+data Binary = BinaryAnd () | BinaryOr ()
+            deriving (Show, Eq)
+
 data Expression = ExprConst Integer
           | ExprTrue ()
           | ExprFalse ()
@@ -104,6 +107,7 @@ data Expression = ExprConst Integer
           | ExprMult Expression Expression
           | ExprBrac Expression
           | ExprBool Expression Order Expression
+          | ExprBin Expression Binary Expression
           | ExprCall String [Expression]
           deriving (Show, Eq)
 

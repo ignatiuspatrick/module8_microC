@@ -13,8 +13,8 @@ import Grammar
 -- Programs
 parseProgram = Program <$> (many parseStatement)
 parseDefinition =
-               try (VariableDef <$> parseType <*> (identifier <* symbol "=") <*> (parseExpression <* semi))
-               <|> (FunctionDef <$> (reserved "function" *> parseType) <*> identifier <*> parens (commaSep parseParam) <*> braces (many parseStatement))
+               (FunctionDef <$> (reserved "function" *> parseType) <*> identifier <*> parens (commaSep parseParam) <*> braces (many parseStatement))
+               <|> (VariableDef <$> parseType <*> (identifier <* symbol "=") <*> (parseExpression <* semi))
 
 -- Variables
 parseType = (IntType <$> reserved "int") <|> (BoolType <$> reserved "boolean") <|> (VoidType <$> reserved "void")
@@ -35,17 +35,23 @@ parseStatement =
 
 -- Algebra
 
+add' = (\_ -> (ExprAdd)) <$> symbol "+"
+
+sub' = (\_ -> (ExprSubtract)) <$> symbol "-"
+
+mult' = (\_ -> (ExprMult)) <$> symbol "*"
+
 parseExpression =
-                try (ExprBool <$> parseStuff <*> parseOrder <*> parseStuff)
-                <|> parseStuff
+                (try (ExprBin <$> parseBoolean <*> parseBinary <*> parseExpression))
+                <|> parseBoolean
 
+parseBoolean = try (ExprBool <$> parseArithmetic1 <*> parseOrder <*> parseBoolean)
+            <|> parseArithmetic1
 
-parseStuff = try (ExprAdd <$> (parseTerm <* symbol "+")  <*> parseTerm)
-           <|> try (ExprSubtract <$> (parseTerm <* symbol "-")  <*> parseTerm)
-           <|> parseTerm
+parseArithmetic1 = (parseArithmetic2 `chainr1` add')
+parseArithmetic2 = (parseArithmetic3 `chainr1` sub')
+parseArithmetic3 = (parseFact `chainr1` mult')
 
-parseTerm = try (ExprMult <$> (parseFact <* symbol "*")  <*> parseFact)
-        <|> parseFact
 
 parseFact =
             (ExprConst <$> integer)
@@ -55,13 +61,16 @@ parseFact =
             <|> (ExprVar <$> identifier)
             <|> (ExprBrac <$> (parens parseExpression))
 
-parseOrder = OrderLT <$> reserved "<"
-          <|> OrderLE <$> reserved "<="
+parseOrder =
+          OrderLE <$> reserved "<="
+          <|> OrderLT <$> reserved "<"
           <|> OrderEQ <$> reserved "=="
           <|> OrderNE <$> reserved "!="
-          <|> OrderGT <$> reserved ">"
           <|> OrderGE <$> reserved ">="
+          <|> OrderGT <$> reserved ">"
 
+parseBinary = BinaryAnd <$> reserved "&&"
+            <|> BinaryOr <$> reserved "||"
 
 
 ----------------- TYPE CHECKING
@@ -82,11 +91,14 @@ initStatement stm@(SmtDef (VariableDef a id expr)) scopes =
 
 initStatement stm@(SmtDef (FunctionDef a id params statements)) scopes =
         if def == (Left (defNotFound))
+        then
+            if (a == VoidType ()) || (isReturnSmt (last statements))
             then
-                if (a == VoidType ()) || (isReturnSmt (last statements))
+                if (a == VoidType ()) || checkRetType (last statements) scopes a
                 then initScope statements ((init updated) ++ [((last updated) ++ (map func params))])
-                else error ("Type error in function definition! The function '" ++ id ++ "' has no return statement.")
-            else error ("Type error in function definition! The identifier '" ++ id ++ "' has already been used.")
+                else error ("Type error in function definition! '" ++ id ++ "''s return statement has the wrong type!")
+            else error ("Type error in function definition! The function '" ++ id ++ "' has no return statement.")
+        else error ("Type error in function definition! The identifier '" ++ id ++ "' has already been used.")
                 where def = getTopLevelDefinition id scopes
                       updated = ((init scopes) ++ [((last scopes) ++ [(id, stm)])]) ++ [[(id, stm)]]
                       func (Param t i) = if t == IntType ()                                               -- fake a definition
@@ -103,23 +115,26 @@ initStatement stm@(SmtWhile e stms) scopes =
                 then initScope stms (scopes ++ [[]])
                 else error ("Type error in while condition!")
 
-initStatement stm@(SmtRet e) scopes =
-            if checkExpr e scopes (strFromType t)
-                then scopes
-                else error ("Type error in return statement!")
-                where (Right (SmtDef (FunctionDef t id params _))) = getCurrentFuncDefinition scopes
+-- this gets checked in the function def
+initStatement stm@(SmtRet e) scopes = scopes
 
 initStatement stm@(SmtAss id e) scopes =
             if def /= (Left defNotFound) && checkExpr e scopes (strFromType t)
                 then scopes
-                else error ("Type error in assignment statement! Variable '" ++ id ++ "' was not initialized'")
+                else error ("Type error in assignment statement! Variable '" ++ id ++ "' was not defined.")
                 where def = getDefinition id scopes
                       t = getTypeFromDef def
 
-initStatement stm@(SmtCall id exps) scopes = if t == (VoidType ()) && checkParams exps params scopes
+initStatement stm@(SmtCall id exps) scopes =
+                    if def /= Left defNotFound
+                    then
+                        if checkParams exps params scopes
                         then scopes
-                        else error ("Type mismatch in void func call statement!")
-                      where (Right (SmtDef (FunctionDef t id params _))) = getDefinition id scopes
+                        else error ("Type mismatch in func call statement! The parameters do not fit the definition!")
+                    else error ("Type error in function call! Function '" ++ id ++ "' was not defined.")
+                      where def = getDefinition id scopes
+                            params = getParamsFromDef def
+                            t = getTypeFromDef def
 
 
 ----------------- EXPRESSION CHECKING
@@ -175,12 +190,13 @@ getTopLevelDefinition id [] = Left defNotFound
 getTopLevelDefinition id [x] = maybeToRight defNotFound (find (\(a, b) -> a == id) x)
 getTopLevelDefinition id scopes = maybeToRight defNotFound (find (\(a, b) -> a == id) (last scopes))
 
-getCurrentFuncDefinition scopes = getCurrentFuncDefinitionHelper (reverse scopes)
+getCurrentFuncDefinition scopes = trace("scopes " ++ (show (reverse scopes))) $ getCurrentFuncDefinitionHelper (reverse scopes)
 getCurrentFuncDefinitionHelper [] = Left (defNotFound)
 getCurrentFuncDefinitionHelper ( ((id, def@(SmtDef (FunctionDef _ _ _ _))):xs) :scopes) = Right def
 getCurrentFuncDefinitionHelper ( x :scopes) = getCurrentFuncDefinitionHelper scopes
 
 
+checkRetType (SmtRet e) scopes t = checkExpr e scopes (strFromType t)
 
 
 ----------------- HELPERS

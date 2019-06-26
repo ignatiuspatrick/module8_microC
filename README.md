@@ -2,6 +2,16 @@
 
 Final project for programming paradigms.
 
+
+
+## Issue tracker
+[ ] - comments
+[+] - complicated arithmetic
+[ ] - fork/join
+[ ] - lock/unlock
+[ ] - arrays
+[?] - and/or
+
 ## Language features (goal)
  
 ### Data types
