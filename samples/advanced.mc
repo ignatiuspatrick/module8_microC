@@ -19,5 +19,7 @@ function int doStuff() {
     }
     return c;
 }
-
-int c = doStuff();
+int x = 0;
+if (c == jacko) {
+    int c = doStuff();
+}
