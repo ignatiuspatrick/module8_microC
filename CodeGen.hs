@@ -13,7 +13,7 @@ import Text.ParserCombinators.Parsec
 ------------- COMPILE PROGRAM
 -- lut must be an empty array, program ss is a result of parsing, and arp is 0
 compileProg :: Program -> [[(String, Integer, Statement, Integer)]] -> Int -> [Instruction]
-compileProg (Program ss) lut arp = [ LoadI (ImmValue arp) regF ] ++ (compileListStat ss lut arp)
+compileProg (Program ss) lut arp = [ Load (ImmValue (fromIntegral arp)) regF ] ++ (compileListStat ss lut arp)
 
 
 
@@ -28,12 +28,13 @@ compileListStat (s:ss) lut arp = (compileStat s newlut arp) ++ (compileListStat 
 
 
 ------------- COMPILE STATEMENT
+compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [Instruction]
 compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = (compileExpr e lut) ++
             [
                 Pop regA
                 , Store regA (DirAddr memad)
             ]
-            where memad = arp + offset + 1 -- points to the caller's arp
+            where memad = fromIntegral ((fromIntegral arp) + offset + 1) -- points to the caller's arp
                   (_,offset,_,_)= (last (last lut))
 
 compileStat s@(SmtDef (FunctionDef _ _ _ _)) lut arp = []
@@ -53,11 +54,11 @@ compileStat s@(SmtWhile e sloop) lut arp = (compileExpr e lut) ++
                 Pop regA
                 , Branch regA (Rel (lenloop + 1))
             ] ++ insloop
-            where newlut = (generateLutSt s lut) --evaluate later on
-                  insloop = compileListStat sloop newlut arp ++ [ Jump (Rel -(lenloop + 1))]
+            where newlut = (generateLutSt s lut) --evaluate later on arp
+                  insloop = compileListStat sloop newlut arp ++ [ Jump (Rel (negate (lenloop + 1)))]
                   lenloop = (length insloop)
 
-compileStat s@(SmtFork e sloop) lut arp = (compileExpr e lut)
+compileStat s@(SmtFork es s1 s2) lut arp = []
 
 
 compileStat s@(SmtRet e) lut arp = (compileExpr e lut) ++
@@ -66,10 +67,10 @@ compileStat s@(SmtRet e) lut arp = (compileExpr e lut) ++
                     -- get return address
                     -- jump back to caller
                 ]
-compileStat s@(SmtAss e sloop) lut arp = (compileExpr e lut)
-compileStat s@(SmtCall e sloop) lut arp = (compileExpr e lut)
-compileStat s@(SmtLock e sloop) lut arp = (compileExpr e lut)
-compileStat s@(SmtUnlock e sloop) lut arp = (compileExpr e lut)
+compileStat s@(SmtAss id e) lut arp = []
+compileStat s@(SmtCall id es) lut arp = []
+compileStat s@(SmtLock id) lut arp = []
+compileStat s@(SmtUnlock id) lut arp = []
 
 
 
@@ -155,19 +156,19 @@ compileExpr (ExprBin a bin b) lut = (compileExpr a lut) ++ (compileExpr b lut) +
 
 
 compileExpr (ExprCall id exprs) lut =
-        (map (\x -> compileExpr x lut) exprs) ++ -- compile arguments
+        (concat (map (\x -> compileExpr x lut) exprs)) ++  -- compile arguments
         [Load (ImmValue newarp) regF] ++      -- load new arp into regF
         loadParam len newarp ++               -- load in params into their field
         [
             -- return value
             -- store own arp
-        ] ++ (compileStat ss lut newarp) ++ [
+        ] ++ (compileListStat ss lut newarp) ++ [
             -- push return value on stack
             -- restore arp
         ]
-        where len = length exprs
+        where len = toInteger (length exprs)
               n = getFuncIndex lut
-              newarp = 4 + len + calcLocalDataSize n lut
+              newarp = fromIntegral (4 + len + calcLocalDataSize n lut)
               (SmtDef (FunctionDef t s ps ss)) = getStatementFromLut n id lut
 
 
@@ -179,15 +180,15 @@ compileExpr (ExprCall id exprs) lut =
 
 ------------- HELPERS
 
-
-loadParam 0 = []
+loadParam :: Integer -> Int -> [Instruction]
+loadParam 0 arp = []
 loadParam n arp =
         [
             Pop regA
             , Load (ImmValue arp) regB -- change this
             , Compute Sub regB regF regB
             , Store regA (DirAddr regB)
-            , Compute Dec regF regF regF
+            , Compute Decr regF regF regF
         ] ++ loadParam (n-1) arp
 
 
@@ -205,7 +206,7 @@ getBinOp (BinaryAnd _) = And
 getBinOp (BinaryOr _) = Or
 
 getOffsetById id ([]:xss) = getOffsetById id xss
-getOffsetById id (((a,b,c):xs):xss)
+getOffsetById id (((a,b,c,d):xs):xss)
     | a == id = b
     | otherwise = getOffsetById id (xs:xss)
 
