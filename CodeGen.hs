@@ -62,12 +62,20 @@ compileStat s@(SmtFork es s1 s2) lut arp = []
 
 
 compileStat s@(SmtRet e) lut arp = (compileExpr arp e lut) ++
-                [
+            [
                     -- pop res from stack, put in return value
-                    -- get return address
-                    -- jump back to caller
-                ]
-compileStat s@(SmtAss id e) lut arp = []
+                    Pop regA
+                    , Store regA (DirAddr addr)
+            ] where addr = (fromIntegral arp - 2)
+
+compileStat s@(SmtAss id e) lut arp = (compileExpr e newlut) ++
+            [
+                    Pop regA
+                    , Store regA (DirAddr addr)
+            ]
+            where newlut = generateLutEx e lut
+                  addr = fromIntegral (getOffsetById id (reverse newlut))
+
 compileStat s@(SmtCall id es) lut arp = []
 compileStat s@(SmtLock id) lut arp = []
 compileStat s@(SmtUnlock id) lut arp = []

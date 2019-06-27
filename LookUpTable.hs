@@ -18,7 +18,8 @@ generateLutSt s@(SmtDef (FunctionDef _ a _ _)) lut = (init lut) ++ [((last lut))
 generateLutSt s@(SmtIf _ _ _) lut = lut ++ [[]]
 generateLutSt s@(SmtWhile _ _) lut = lut ++ [[]]
 generateLutSt s@(SmtFork _ _ _) lut = lut ++ [[]]
-generateLutSt s lut = lut
+
+generateLutSt _ lut = lut
 
 
 generateLutEx (ExprCall s _) lut = lut ++
