@@ -45,4 +45,12 @@ helpCalcLocalData (((_,_,_,_):xs):xss) = 0 + helpCalcLocalData (xs:xss)
 calcLocalDataSize n lut = helpCalcLocalData b
             where (_,b) = splitAt ((fromIntegral n)+1) lut
 
-getStatementFromLut n id lut = (SmtDef ())
+getStatementFromLut :: Int -> String -> [[(String, Integer, Statement, Integer)]] -> Statement
+getStatementFromLut n id lut = helperGetStatement newlut id
+            where newlut = reverse (fst (splitAt n lut))
+
+helperGetStatement :: [[(String, Integer, Statement, Integer)]] -> String -> Statement
+helperGetStatement ([]:xss) id = helperGetStatement xss id
+helperGetStatement (((a,_,c,_):xs):xss) id
+ | a == id = c
+ | otherwise = helperGetStatement (xs:xss) id

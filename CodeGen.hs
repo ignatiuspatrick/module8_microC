@@ -169,7 +169,7 @@ compileExpr (ExprCall id exprs) lut =
         where len = toInteger (length exprs)
               n = getFuncIndex lut
               newarp = fromIntegral (4 + len + calcLocalDataSize n lut)
-              (SmtDef (FunctionDef t s ps ss)) = getStatementFromLut n id lut
+              (SmtDef (FunctionDef t s ps ss)) = getStatementFromLut (fromIntegral n) id lut
 
 
 
