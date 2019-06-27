@@ -19,7 +19,6 @@ generateLutSt s@(SmtIf _ _ _) lut = lut ++ [[]]
 generateLutSt s@(SmtWhile _ _) lut = lut ++ [[]]
 generateLutSt s@(SmtFork _ _ _) lut = lut ++ [[]]
 
-
 generateLutSt _ lut = lut
 
 

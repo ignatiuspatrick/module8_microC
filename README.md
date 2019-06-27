@@ -38,6 +38,7 @@ or garbage collection.
  - assignments (for arrays copy the contents)
  - if
  - while
+ - !!! fix the function call problem as in the one explained in advanced.mc
  
 ### Concurrency
  - creating threads ([fork-join](https://en.wikipedia.org/wiki/Fork%E2%80%93join_model))
