@@ -89,6 +89,9 @@ data Statement = SmtDef Definition
                | SmtRet Expression
                | SmtAss String Expression
                | SmtCall String [Expression]
+               | SmtFork [String] [Statement] [Statement]
+               | SmtLock String
+               | SmtUnlock String
                 deriving (Show, Eq)
 
 
@@ -144,8 +147,8 @@ parser p xs | isLeft res = error $ show $ fromLeft' res
   where res = parse p "" xs
 
 languageDef = emptyDef {
-                Token.reservedOpNames = ["=", "+", "*", "-", "==", "!=", "<", "<=", ">", ">="],
-                Token.reservedNames = ["if", "while", "else", "function", "return", "int", "boolean", "true", "false", ","],
+                Token.reservedOpNames = ["=", "+", "*", "-", "==", "!=", "<", "<=", ">", ">=", "&&", "||"],
+                Token.reservedNames = ["fork", "lock", "unlock", "", "if", "while", "else", "function", "return", "int", "boolean", "void", "true", "false", ","],
                 Token.identStart = letter,
                 Token.identLetter = alphaNum,
                 Token.commentLine = "//"

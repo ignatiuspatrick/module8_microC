@@ -24,9 +24,12 @@ parseParam = Param <$> parseType <*> identifier
 
 -- Language
 parseStatement =
-               try (SmtIf <$> (reserved "if" *> (parens parseExpression)) <*> (braces (many parseStatement)) <*> option [] (reserved "else" *> (braces (many parseStatement))))
-              <|> try (SmtWhile <$> (reserved "while" *> (parens parseExpression)) <*> (braces (many parseStatement)))
-              <|> try (SmtRet <$> (reserved "return" *> parseExpression <* semi))
+               SmtIf <$> (reserved "if" *> (parens parseExpression)) <*> (braces (many parseStatement)) <*> option [] (reserved "else" *> (braces (many parseStatement)))
+              <|> SmtWhile <$> (reserved "while" *> (parens parseExpression)) <*> (braces (many parseStatement))
+              <|> SmtRet <$> (reserved "return" *> parseExpression <* semi)
+              <|> SmtFork <$> (reserved "fork" *> (parens (commaSep identifier))) <*> (braces (many parseStatement)) <*> (braces (many parseStatement))
+              <|> SmtLock <$> (reserved "lock" *> identifier <* semi)
+              <|> SmtUnlock <$> (reserved "unlock" *> identifier <* semi)
               <|> try (SmtDef <$> parseDefinition)
               <|> try (SmtAss <$> (identifier <* symbol "=") <*> parseExpression <* semi)
               <|> SmtCall <$> identifier <*> (parens (commaSep parseExpression)) <* semi
@@ -35,11 +38,11 @@ parseStatement =
 
 -- Algebra
 
-add' = (\_ -> (ExprAdd)) <$> symbol "+"
+add' = (\_ -> (ExprAdd)) <$> reserved "+"
 
-sub' = (\_ -> (ExprSubtract)) <$> symbol "-"
+sub' = (\_ -> (ExprSubtract)) <$> reserved "-"
 
-mult' = (\_ -> (ExprMult)) <$> symbol "*"
+mult' = (\_ -> (ExprMult)) <$> reserved "*"
 
 parseExpression =
                 (try (ExprBin <$> parseBoolean <*> parseBinary <*> parseExpression))
@@ -91,31 +94,46 @@ initStatement stm@(SmtDef (VariableDef a id expr)) scopes =
 
 initStatement stm@(SmtDef (FunctionDef a id params statements)) scopes =
         if def == (Left (defNotFound))
-        then
-            if (a == VoidType ()) || (isReturnSmt (last statements))
             then
-                if (a == VoidType ()) || checkRetType (last statements) scopes a
-                then initScope statements ((init updated) ++ [((last updated) ++ (map func params))])
-                else error ("Type error in function definition! '" ++ id ++ "''s return statement has the wrong type!")
-            else error ("Type error in function definition! The function '" ++ id ++ "' has no return statement.")
-        else error ("Type error in function definition! The identifier '" ++ id ++ "' has already been used.")
+                if (a == VoidType ()) || (isReturnSmt (last statements))
+                then res
+                else error ("Type error in function definition! The function '" ++ id ++ "' has no return statement.")
+            else error ("Type error in function definition! The identifier '" ++ id ++ "' has already been used.")
                 where def = getTopLevelDefinition id scopes
                       updated = ((init scopes) ++ [((last scopes) ++ [(id, stm)])]) ++ [[(id, stm)]]
                       func (Param t i) = if t == IntType ()                                               -- fake a definition
                                               then (i, (SmtDef (VariableDef t id (ExprConst 0))))
                                               else (i, (SmtDef (VariableDef t id (ExprTrue ()))))
+                      res = initScope statements ((init updated) ++ [((last updated) ++ (map func params))])
 
 initStatement stm@(SmtIf e stm1 stm2) scopes =
             if checkExpr e scopes "boolean"
-                then initScope stm2 ((init (initScope stm1 (scopes ++ [[]]))) ++ [[]])
+                then res
                 else error ("Type error in if condition!" )
+                where res = initScope stm2 (res1 ++ [[]])
+                      res1 = (initScope stm1 (scopes ++ [[]]))
 
 initStatement stm@(SmtWhile e stms) scopes =
             if checkExpr e scopes "boolean"
-                then initScope stms (scopes ++ [[]])
+                then res
                 else error ("Type error in while condition!")
+                where res = initScope stms (scopes ++ [[]])
 
--- this gets checked in the function def
+initStatement stm@(SmtFork ids s1 s2) scopes =
+            if checkForkParams ids scopes
+            then
+                if checkForkLocks ids s1 && checkForkLocks ids s2
+                then scopes ++ res1 ++ res2
+                else error ("Locking a variable that wasn't moved!")
+            else error ("Fork arguments have not been initialized before!")
+            where res1 = initScope s1 lut
+                  res2 = initScope s2 lut
+                  lut = [[] ++ (map (\x -> let (Right def) = getDefinition x scopes in (x, def)) ids)]
+
+
+initStatement stm@(SmtLock e) scopes = scopes
+initStatement stm@(SmtUnlock e) scopes = scopes
+
 initStatement stm@(SmtRet e) scopes = scopes
 
 initStatement stm@(SmtAss id e) scopes =
@@ -151,6 +169,8 @@ checkExpr (ExprBool e1 o e2) scopes exprType =
                     (checkExpr e1 scopes "int" && checkExpr e2 scopes "int")
                      ||
                     (checkExpr e1 scopes "boolean" && checkExpr e2 scopes "boolean")
+checkExpr (ExprBin e1 b e2) scopes exprType =
+                    (checkExpr e1 scopes "boolean" && checkExpr e2 scopes "boolean")
 
 
 checkExpr (ExprCall id xs) scopes exprType =
@@ -166,12 +186,30 @@ checkExpr (ExprCall id xs) scopes exprType =
 
 
 checkExpr (ExprVar id) scopes exprType =
-                    if def /= Left (defNotFound) then (if exprType == "int"
+                    if def /= Left (defNotFound)
+                    then
+                        if exprType == "int"
                         then t == IntType ()
-                        else t == BoolType ())
+                        else t == BoolType ()
                     else False
                         where def = getDefinition id scopes
                               t = getTypeFromDef def
+
+
+
+----------------- HELPERS
+
+checkForkParams ids scopes = and (map (\x -> getDefinition x scopes /= Left defNotFound) ids)
+
+checkForkLocks ids [] = True
+checkForkLocks ids ((SmtLock id):statements) = (id `elem` ids) && checkForkLocks ids statements
+checkForkLocks ids ((SmtUnlock id):statements) = (id `elem` ids) && checkForkLocks ids statements
+checkForkLocks ids ((SmtIf e s1 s2):statements) = checkForkLocks ids s1 && checkForkLocks ids s2 && checkForkLocks ids statements
+checkForkLocks ids ((SmtWhile e s):statements) = checkForkLocks ids s && checkForkLocks ids statements
+checkForkLocks ids ((SmtFork i s1 s2):statements) = checkForkLocks (ids ++ i) s1 && checkForkLocks (ids ++ i) s2 && checkForkLocks ids statements
+checkForkLocks ids ((SmtDef (FunctionDef a id params s):statements)) = checkForkLocks ids s && checkForkLocks ids statements
+checkForkLocks ids (_:statements) = checkForkLocks ids statements
+
 
 checkParams (e:exps) ((Param t id):params) scopes = checkExpr e scopes (if t == (IntType ()) then "int" else "boolean")
 checkParams [] [] scopes = True
@@ -179,29 +217,21 @@ checkParams _ [] scopes = False
 checkParams [] _ scopes = False
 
 
-
 getDefinition :: String -> [[(String, Statement)]] -> Either String Statement
 getDefinition id scopes = getDefRec id (reverse scopes)
 getDefRec id [] = Left defNotFound
+getDefRec id ([]:xs) = getDefRec id (xs)
 getDefRec id (x:xs) = if (length filtered) > 0 then Right (filtered!!0) else getDefRec id xs
                   where filtered = [smt | (i, smt@(SmtDef _)) <- x, i == id]
 
 getTopLevelDefinition id [] = Left defNotFound
 getTopLevelDefinition id [x] = maybeToRight defNotFound (find (\(a, b) -> a == id) x)
-getTopLevelDefinition id scopes = maybeToRight defNotFound (find (\(a, b) -> a == id) (last scopes))
+getTopLevelDefinition id scopes = maybeToRight defNotFound found
+        where found = (find (\(a, b) -> a == id) (last scopes))
 
-getCurrentFuncDefinition scopes = trace("scopes " ++ (show (reverse scopes))) $ getCurrentFuncDefinitionHelper (reverse scopes)
-getCurrentFuncDefinitionHelper [] = Left (defNotFound)
-getCurrentFuncDefinitionHelper ( ((id, def@(SmtDef (FunctionDef _ _ _ _))):xs) :scopes) = Right def
-getCurrentFuncDefinitionHelper ( x :scopes) = getCurrentFuncDefinitionHelper scopes
-
-
-checkRetType (SmtRet e) scopes t = checkExpr e scopes (strFromType t)
-
-
------------------ HELPERS
 
 -- Open scope and put in the first of the statements into it
+initScope [] scopes = init scopes
 initScope statements scopes = init folded
                        where folded = initializeStatements statements scopes
 
