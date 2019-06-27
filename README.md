@@ -5,7 +5,7 @@ Final project for programming paradigms.
 
 
 ## Issue tracker
-[?] - comments
+[+] - comments
 [+] - fork/join
 [+] - lock/unlock
 
