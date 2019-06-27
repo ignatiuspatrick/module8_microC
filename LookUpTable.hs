@@ -18,18 +18,14 @@ generateLutSt s@(SmtDef (FunctionDef _ a _ _)) lut = (init lut) ++ [((last lut))
 generateLutSt s@(SmtIf _ _ _) lut = lut ++ [[]]
 generateLutSt s@(SmtWhile _ _) lut = lut ++ [[]]
 generateLutSt s@(SmtFork _ _ _) lut = lut ++ [[]]
-
-
-generateLutSt _ lut = lut
+generateLutSt s lut = lut
 
 
 generateLutEx (ExprCall s _) lut = lut ++
             [[("#", 0, SmtDef (VariableDef (IntType ()) "#" (ExprConst 0)),  n)]]
-            -- get return value from callee
-            -- restore previous arp
             where n =  toInteger (length lut)
 
-
+generateLutEx _ lut = lut
 
 
 

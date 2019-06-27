@@ -29,7 +29,7 @@ compileListStat (s:ss) lut arp = (compileStat s newlut arp) ++ (compileListStat 
 
 ------------- COMPILE STATEMENT
 compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [Instruction]
-compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = (compileExpr e lut) ++
+compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = (compileExpr arp e lut) ++
             [
                 Pop regA
                 , Store regA (DirAddr memad)
@@ -38,7 +38,7 @@ compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = (compileExpr e lut) ++
                   (_,offset,_,_)= (last (last lut))
 
 compileStat s@(SmtDef (FunctionDef _ _ _ _)) lut arp = []
-compileStat s@(SmtIf e strue sfalse) lut arp = (compileExpr e lut) ++
+compileStat s@(SmtIf e strue sfalse) lut arp = (compileExpr arp e lut) ++
             [
                 Pop regA -- regA result might be 0 or 1
                 , Branch regA (Rel (lenfalse+1))
@@ -49,7 +49,7 @@ compileStat s@(SmtIf e strue sfalse) lut arp = (compileExpr e lut) ++
                   insfalse = compileListStat sfalse newlut arp
                   lenfalse = (length insfalse)
 
-compileStat s@(SmtWhile e sloop) lut arp = (compileExpr e lut) ++
+compileStat s@(SmtWhile e sloop) lut arp = (compileExpr arp e lut) ++
             [
                 Pop regA
                 , Branch regA (Rel (lenloop + 1))
@@ -61,7 +61,7 @@ compileStat s@(SmtWhile e sloop) lut arp = (compileExpr e lut) ++
 compileStat s@(SmtFork es s1 s2) lut arp = []
 
 
-compileStat s@(SmtRet e) lut arp = (compileExpr e lut) ++
+compileStat s@(SmtRet e) lut arp = (compileExpr arp e lut) ++
                 [
                     -- pop res from stack, put in return value
                     -- get return address
@@ -80,36 +80,39 @@ compileStat s@(SmtUnlock id) lut arp = []
 
 ------------- COMPILE EXPRESSION
 
-compileExpr :: Expression -> [[(String, Integer, Statement, Integer)]] -> [Instruction]
-compileExpr (ExprConst a) lut =
+compileExpr :: Int -> Expression -> [[(String, Integer, Statement, Integer)]] -> [Instruction]
+compileExpr arp (ExprConst a) lut =
         [
                 Load (ImmValue (fromIntegral a)) regA -- load a into register 0
                 , Push regA -- push into register A
         ]
 
 -- for true put 1, and for false put 0
-compileExpr (ExprTrue _) lut =
+compileExpr arp (ExprTrue _) lut =
         [
                 Load (ImmValue (intBool True)) regA
                 , Push regA
         ]
 
-compileExpr (ExprFalse _) lut =
+compileExpr arp (ExprFalse _) lut =
         [
                 Load (ImmValue (intBool False)) regA
                 , Push regA
         ]
 
--- -- find id in lut, get offset, get arp, add offset to arp, load result -> regA
-compileExpr (ExprVar xs) lut =
+-- find id in lut, get offset, get arp, add offset to arp, load result -> regA
+compileExpr arp (ExprVar id) lut =
+        getPathToAR id lut ++
         [
-            Load (DirAddr (fromIntegral offset)) regA -- change a later with the offset
+            Load (ImmValue offset) regC
+            , Compute Add regC regE regE
+            , Load (IndAddr regE) regA -- change a later with the offset
             , Push regA
         ]
-        where offset = getOffsetById xs (reverse lut)
+        where offset = (fromIntegral (getOffsetById id (reverse lut))) + 1
 
 
-compileExpr (ExprAdd a b) lut = (compileExpr a lut) ++ (compileExpr b lut) ++
+compileExpr arp(ExprAdd a b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
         [
             Pop regA
             , Pop regB
@@ -117,7 +120,7 @@ compileExpr (ExprAdd a b) lut = (compileExpr a lut) ++ (compileExpr b lut) ++
             , Push regC
         ]
 
-compileExpr (ExprSubtract a b) lut = (compileExpr a lut) ++ (compileExpr b lut) ++
+compileExpr arp (ExprSubtract a b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
         [
             Pop regA
             , Pop regB
@@ -125,7 +128,7 @@ compileExpr (ExprSubtract a b) lut = (compileExpr a lut) ++ (compileExpr b lut) 
             , Push regC
         ]
 
-compileExpr (ExprMult a b) lut = (compileExpr a lut) ++ (compileExpr b lut) ++
+compileExpr arp (ExprMult a b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
         [
             Pop regA
             , Pop regB
@@ -133,9 +136,9 @@ compileExpr (ExprMult a b) lut = (compileExpr a lut) ++ (compileExpr b lut) ++
             , Push regC
         ]
 
-compileExpr (ExprBrac a) lut = (compileExpr a lut)
+compileExpr arp (ExprBrac a) lut = (compileExpr arp a lut)
 
-compileExpr (ExprBool a ord b) lut = (compileExpr a lut) ++ (compileExpr b lut) ++
+compileExpr arp (ExprBool a ord b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
         [
             Pop regA
             , Pop regB
@@ -144,7 +147,7 @@ compileExpr (ExprBool a ord b) lut = (compileExpr a lut) ++ (compileExpr b lut) 
         ]
         where cmpOp = getCmpOp ord
 
-compileExpr (ExprBin a bin b) lut = (compileExpr a lut) ++ (compileExpr b lut) ++
+compileExpr arp (ExprBin a bin b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
         [
             Pop regA
             , Pop regB
@@ -155,24 +158,23 @@ compileExpr (ExprBin a bin b) lut = (compileExpr a lut) ++ (compileExpr b lut) +
 
 
 
-compileExpr (ExprCall id exprs) lut =
-        (concat (map (\x -> compileExpr x lut) exprs)) ++  -- compile arguments
-        [Load (ImmValue newarp) regF] ++      -- load new arp into regF
-        loadParam len newarp ++               -- load in params into their field
+compileExpr arp (ExprCall id exprs) lut  =
+        (concat (map (\x -> compileExpr arp x lut) exprs)) ++     -- compile arguments
         [
-            -- return value
-            -- store own arp
-        ] ++ (compileListStat ss lut newarp) ++ [
-            -- push return value on stack
-            -- restore arp
+            Store regF (ImmValue newarp)                       -- store caller arp in correct place
+            , Load (ImmValue newarp) regF                         -- load new arp into regF
+        ] ++
+        loadParam len newarp ++                                  -- load in params into their field
+        (compileListStat ss lut newarp) ++ [                     -- generate code for the function
+            Load (DirAddr retVal) regA                         -- get ret value
+            ,Push regA
+            , Load (ImmValue arp) regF                            -- restore arp
         ]
         where len = toInteger (length exprs)
               n = getFuncIndex lut
-              newarp = fromIntegral (4 + len + calcLocalDataSize n lut)
+              newarp = arp + fromIntegral (3 + len + calcLocalDataSize n lut)
+              retVal = newarp - 2
               (SmtDef (FunctionDef t s ps ss)) = getStatementFromLut (fromIntegral n) id lut
-
-
-
 
 
 
@@ -211,10 +213,18 @@ getOffsetById id (((a,b,c,d):xs):xss)
     | otherwise = getOffsetById id (xs:xss)
 
 
+getPathToAR id lut =
+                [Compute Add regF reg0 regE] ++ -- get current arp into regE
+                (map (\x -> (Load (IndAddr regE) regE) ) (init [0..n])) -- go to parent's AR n times
+            where n = getChangeInN id lut (getFuncIndex lut)
 
 
-
-
+getChangeInN :: String -> [[(String, Integer, Statement, Integer)]] -> Integer -> Int
+getChangeInN id ([]:xss) n = getChangeInN id (xss) n
+getChangeInN id (((a,b,c,d):xs):xss) currentN
+    | d /= currentN = 1 + (getChangeInN id (((a,b,c,d):xs):xss) d)
+    | a == id = 0
+    | otherwise = getChangeInN id (xs:xss) currentN
 
 
 ------------- TESTING
@@ -222,4 +232,4 @@ getOffsetById id (((a,b,c,d):xs):xss)
 getExpr str = parse parseExpression [] str
 unEither (Right e) = e
 
-testCodeGenExpr = compileExpr (unEither (getExpr "")) []
+testCodeGenExpr = compileExpr 0 (unEither (getExpr "")) []

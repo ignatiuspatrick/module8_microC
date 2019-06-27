@@ -9,3 +9,5 @@ main = print("Main!")
 
 parseFile path = testParser <$> readFile path
 initFile path = testFront <$> readFile path
+
+compile path = (\x -> compileProg x [[]] 0 ) <$> (initFile path)

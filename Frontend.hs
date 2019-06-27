@@ -258,10 +258,10 @@ defNotFound = "Definition not found!"
 
 ----------------- TEST
 
-testFront p = testInit (testParser p)
+testFront p = if length (testInit (par)) >= 0 then parsed else error ("Type checking failed!")
+        where par@(Right parsed) = testParser p
 
 testInit (Right p) = initProg p [[]]
-testInit (Left p) = error "Parser error!"
 
 testParser p = parse parseProgram [] p
 
