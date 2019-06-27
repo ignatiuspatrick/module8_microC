@@ -2,7 +2,8 @@ int x = 1;
 int y = 10;
 boolean z = true;
 
-function int main(int x) {
+function int main(int z) {
+    int x = 1;
     int a = 0;
     int b = 5;
     int c = a + b;
@@ -15,4 +16,4 @@ function int main(int x) {
     return a;
 }
 
-int x = main(2);
+main(2);

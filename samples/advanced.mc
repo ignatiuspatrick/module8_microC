@@ -6,17 +6,17 @@ function int doStuff() {
     boolean a = true;
 
     if (a == true) {
-        z = false;
+        int z = false;
     }
 
     int c = 0;
+
     while (z == false) {
         c = c + 4;
         if (c >= 10) {
-                    z = true;
+            z = true;
         }
     }
-
     return c;
 }
 
