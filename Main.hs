@@ -1,6 +1,7 @@
 module Main where
 
 import Frontend
+import CodeGen
 import Text.ParserCombinators.Parsec
 
 main = print("Main!")
