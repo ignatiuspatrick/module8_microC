@@ -143,7 +143,8 @@ generateLutSt s@(SmtDef (FunctionDef _ a _ _)) lut = (init lut) ++ [((last lut))
             where n = (getFuncIndex (reverse lut))
 
 
-generateLutStIf s lut =
+generateLutStIf s lut = lut ++ [[]]
+            where
 
 generateLutSt _ lut = lut
 
