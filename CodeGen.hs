@@ -68,7 +68,7 @@ compileStat s@(SmtRet e) lut arp = (compileExpr arp e lut) ++
                     , Store regA (DirAddr addr)
             ] where addr = (fromIntegral arp - 2)
 
-compileStat s@(SmtAss id e) lut arp = (compileExpr e newlut) ++
+compileStat s@(SmtAss id e) lut arp = (compileExpr arp e newlut) ++
             [
                     Pop regA
                     , Store regA (DirAddr addr)
