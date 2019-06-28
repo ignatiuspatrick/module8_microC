@@ -5,7 +5,7 @@ import LookUpTable
 import Frontend
 import Grammar
 import Text.ParserCombinators.Parsec
-
+import Debug.Trace
 
 
 -- Instruction generators
@@ -29,13 +29,13 @@ compileListStat (s:ss) lut arp = (compileStat s newlut arp) ++ (compileListStat 
 
 ------------- COMPILE STATEMENT
 compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [Instruction]
-compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = (compileExpr arp e lut) ++
+compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = trace("arp " ++ (show arp) ++ " lut " ++ (show lut)) (compileExpr arp e lut) ++
             [
                 Pop regA
                 , Store regA (DirAddr memad)
             ]
-            where memad = fromIntegral ((fromIntegral arp) + offset + 1) -- points to the caller's arp
-                  (_,offset,_,_)= (last (last lut))
+            where memad = fromIntegral ((fromIntegral arp) + offset) -- points to the caller's arp
+                  (_,offset,_,_) = (last (last lut))
 
 compileStat s@(SmtDef (FunctionDef _ _ _ _)) lut arp = []
 compileStat s@(SmtIf e strue sfalse) lut arp = (compileExpr arp e lut) ++
@@ -76,7 +76,23 @@ compileStat s@(SmtAss id e) lut arp = (compileExpr arp e newlut) ++
             where newlut = generateLutEx e lut
                   addr = fromIntegral (getOffsetById id (reverse newlut))
 
-compileStat s@(SmtCall id es) lut arp = []
+compileStat s@(SmtCall id exprs) lut arp =
+                (concat (map (\x -> compileExpr arp x lut) exprs)) ++     -- compile arguments
+                [
+                    Load (ImmValue newarp) regF                         -- load new arp into regF
+                    , Store regF (ImmValue arp)                       -- store caller arp in correct place
+                ] ++
+                loadParam len newarp ++                                  -- load in params into their field
+                (compileListStat ss lut newarp) ++ [                     -- generate code for the function
+                    Load (ImmValue arp) regF                            -- restore arp
+                ]
+                where len = toInteger (length exprs)
+                      n = getFuncIndex lut
+                      newarp = arp + fromIntegral (3 + len + calcLocalDataSize n lut)
+                      retVal = newarp - 2
+                      (SmtDef (FunctionDef t s ps ss)) = getStatementFromLut (fromIntegral n) id lut
+
+
 compileStat s@(SmtLock id) lut arp = []
 compileStat s@(SmtUnlock id) lut arp = []
 
@@ -195,10 +211,9 @@ loadParam 0 arp = []
 loadParam n arp =
         [
             Pop regA
-            , Load (ImmValue arp) regB -- change this
-            , Compute Sub regB regF regB
-            , Store regA (DirAddr regB)
-            , Compute Decr regF regF regF
+            , Load (ImmValue (2 + (fromIntegral n))) regB
+            , Compute Sub regF regB regB
+            , Store regA (IndAddr regB)
         ] ++ loadParam (n-1) arp
 
 
