@@ -46,7 +46,7 @@ compileStat s@(SmtIf e strue sfalse) lut arp = (compileExpr arp e lut) ++
             where newlut = (generateLutSt s lut) -- evaluate later on
                   instrue = compileListStat strue newlut arp
                   lentrue = (length instrue)
-                  insfalse = compileListStat sfalse newlut arp
+                  insfalse = (compileListStat sfalse newlut arp) ++ [ Jump (Rel (lentrue+1)) ]
                   lenfalse = (length insfalse)
 
 compileStat s@(SmtWhile e sloop) lut arp = (compileExpr arp e lut) ++
@@ -68,12 +68,15 @@ compileStat s@(SmtRet e) lut arp = (compileExpr arp e lut) ++
             ] where addr = (fromIntegral arp - 2)
 
 compileStat s@(SmtAss id e) lut arp = (compileExpr arp e newlut) ++
+            getPathToAR id lut ++
             [
-                    Pop regA
-                    , Store regA (DirAddr addr)
+                Load (ImmValue offset) regC
+                , Compute Add regC regE regE
+                , Pop regA
+                , Store regA (IndAddr regE)
             ]
             where newlut = generateLutEx e lut
-                  addr = fromIntegral (getOffsetById id (reverse newlut))
+                  offset = fromIntegral (getOffsetById id (reverse newlut))
 
 compileStat s@(SmtCall id exprs) lut arp =
                 (concat (map (\x -> compileExpr arp x lut) exprs)) ++     -- compile arguments

@@ -6,7 +6,7 @@ function int doStuff() {
     boolean a = true;
 
     if (a == true) {
-        int z = false;
+        int z = 1;
     }
 
     int c = 0;
@@ -19,7 +19,6 @@ function int doStuff() {
     }
     return c;
 }
-int x = 0;
-if (z) {
+if (z){
     int c = doStuff();
 }
