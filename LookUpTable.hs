@@ -7,7 +7,7 @@ import Data.Either
 import Debug.Trace
 
 generateLutSt :: Statement -> [[(String, Integer, Statement, Integer)]] -> [[(String, Integer, Statement, Integer)]]
-generateLutSt s@(SmtDef (VariableDef _ a e)) lut = generateLutEx e newlut
+generateLutSt s@(SmtDef (VariableDef _ a e)) lut = newlut
             where n = (getFuncIndex (reverse lut))
                   offset = (calcLocalDataSize n lut) + 1 -- points to the caller's arp
                   newlut = (init lut) ++ [((last lut)) ++ [(a,offset,s,n)]]

@@ -8,4 +8,5 @@ function int main(int z) {
     return a;
 }
 
-main(2);
+int a = main(2);
+

@@ -181,19 +181,20 @@ compileExpr arp (ExprBin a bin b) lut = (compileExpr arp a lut) ++ (compileExpr 
 
 
 
-compileExpr arp (ExprCall id exprs) lut  =
+compileExpr arp e@(ExprCall id exprs) lut  =
         (concat (map (\x -> compileExpr arp x lut) exprs)) ++     -- compile arguments
         [
             Load (ImmValue newarp) regF                         -- load new arp into regF
             , Store regF (ImmValue arp)                       -- store caller arp in correct place
         ] ++
         loadParam len newarp ++                                  -- load in params into their field
-        (compileListStat ss lut newarp) ++ [                     -- generate code for the function
+        (compileListStat ss newlut newarp) ++ [                     -- generate code for the function
             Load (DirAddr retVal) regA                         -- get ret value
             , Push regA
             , Load (ImmValue arp) regF                            -- restore arp
         ]
         where len = toInteger (length exprs)
+              newlut = generateLutEx e lut
               n = getFuncIndex lut
               newarp = arp + fromIntegral (3 + len + calcLocalDataSize n lut)
               retVal = newarp - 2

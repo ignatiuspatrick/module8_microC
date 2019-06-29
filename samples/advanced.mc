@@ -20,6 +20,6 @@ function int doStuff() {
     return c;
 }
 int x = 0;
-if (c == jacko) {
+if (z) {
     int c = doStuff();
 }
