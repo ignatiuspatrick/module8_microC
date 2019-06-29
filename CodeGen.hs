@@ -12,8 +12,8 @@ import Debug.Trace
 
 ------------- COMPILE PROGRAM
 -- lut must be an empty array, program ss is a result of parsing, and arp is 0
-compileProg :: Program -> [[(String, Integer, Statement, Integer)]] -> Int -> [Instruction]
-compileProg (Program ss) lut arp = [ Load (ImmValue (fromIntegral arp)) regF ] ++ (compileListStat ss lut arp)
+compileProg :: Program -> [[(String, Integer, Statement, Integer)]] -> Int -> [[Instruction]]
+compileProg (Program ss) lut arp = [res] where res = [ Load (ImmValue (fromIntegral arp)) regF ] ++ (compileListStat ss lut arp) ++ [ WriteInstr regA numberIO , EndProg ]
 
 
 
@@ -29,7 +29,7 @@ compileListStat (s:ss) lut arp = (compileStat s newlut arp) ++ (compileListStat 
 
 ------------- COMPILE STATEMENT
 compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [Instruction]
-compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = trace("arp " ++ (show arp) ++ " lut " ++ (show lut)) (compileExpr arp e lut) ++
+compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = (compileExpr arp e lut) ++
             [
                 Pop regA
                 , Store regA (DirAddr memad)
@@ -63,9 +63,8 @@ compileStat s@(SmtFork es s1 s2) lut arp = []
 
 compileStat s@(SmtRet e) lut arp = (compileExpr arp e lut) ++
             [
-                    -- pop res from stack, put in return value
-                    Pop regA
-                    , Store regA (DirAddr addr)
+                Pop regA
+                , Store regA (DirAddr addr)
             ] where addr = (fromIntegral arp - 2)
 
 compileStat s@(SmtAss id e) lut arp = (compileExpr arp e newlut) ++
@@ -133,7 +132,7 @@ compileExpr arp (ExprVar id) lut =
             , Load (IndAddr regE) regA -- change a later with the offset
             , Push regA
         ]
-        where offset = (fromIntegral (getOffsetById id (reverse lut))) + 1
+        where offset = (fromIntegral (getOffsetById id (reverse lut)))
 
 
 compileExpr arp(ExprAdd a b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
@@ -185,13 +184,13 @@ compileExpr arp (ExprBin a bin b) lut = (compileExpr arp a lut) ++ (compileExpr 
 compileExpr arp (ExprCall id exprs) lut  =
         (concat (map (\x -> compileExpr arp x lut) exprs)) ++     -- compile arguments
         [
-            Store regF (ImmValue newarp)                       -- store caller arp in correct place
-            , Load (ImmValue newarp) regF                         -- load new arp into regF
+            Load (ImmValue newarp) regF                         -- load new arp into regF
+            , Store regF (ImmValue arp)                       -- store caller arp in correct place
         ] ++
         loadParam len newarp ++                                  -- load in params into their field
         (compileListStat ss lut newarp) ++ [                     -- generate code for the function
             Load (DirAddr retVal) regA                         -- get ret value
-            ,Push regA
+            , Push regA
             , Load (ImmValue arp) regF                            -- restore arp
         ]
         where len = toInteger (length exprs)
@@ -239,14 +238,14 @@ getOffsetById id (((a,b,c,d):xs):xss)
 getPathToAR id lut =
                 [Compute Add regF reg0 regE] ++ -- get current arp into regE
                 (map (\x -> (Load (IndAddr regE) regE) ) (init [0..n])) -- go to parent's AR n times
-            where n = getChangeInN id lut (getFuncIndex lut)
+            where n = getChangeInN id (reverse lut) (getFuncIndex (reverse lut))
 
 
 getChangeInN :: String -> [[(String, Integer, Statement, Integer)]] -> Integer -> Int
 getChangeInN id ([]:xss) n = getChangeInN id (xss) n
 getChangeInN id (((a,b,c,d):xs):xss) currentN
-    | d /= currentN = 1 + (getChangeInN id (((a,b,c,d):xs):xss) d)
     | a == id = 0
+    | d /= currentN = 1 + (getChangeInN id (((a,b,c,d):xs):xss) d)
     | otherwise = getChangeInN id (xs:xss) currentN
 
 

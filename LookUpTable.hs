@@ -16,7 +16,7 @@ generateLutSt s@(SmtDef (FunctionDef _ a _ _)) lut = (init lut) ++ [((last lut))
             where n = (getFuncIndex (reverse lut))
 
 
-generateLutSt s@(SmtCall _ _) lut = lut ++ [[("#", 0, SmtDef (VariableDef (IntType ()) "#" (ExprConst 0)),  n)]]
+generateLutSt s@(SmtCall _ _) lut = lut ++ [[("#", 0, SmtDef (FunctionDef (IntType ()) "#" [(Param (IntType()) "&")] []),  n)]]
              where  n = toInteger (length lut)
 
 generateLutSt s@(SmtIf _ _ _) lut = lut ++ [[]]
@@ -26,11 +26,14 @@ generateLutSt s@(SmtFork _ _ _) lut = lut ++ [[]]
 generateLutSt _ lut = lut
 
 
+fixUpLut (ExprCall s _) lut = (init lut)
+
 generateLutEx (ExprCall s _) lut = lut ++
-            [[("#", 0, SmtDef (VariableDef (IntType ()) "#" (ExprConst 0)),  n)]]
+            [[("#", 0, SmtDef (FunctionDef (IntType ()) "#" [(Param (IntType()) "&")] []),  n)]]
             where n =  toInteger (length lut)
 
 generateLutEx _ lut = lut
+
 
 
 
