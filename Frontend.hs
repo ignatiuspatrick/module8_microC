@@ -27,7 +27,7 @@ parseStatement =
                SmtIf <$> (reserved "if" *> (parens parseExpression)) <*> (braces (many parseStatement)) <*> option [] (reserved "else" *> (braces (many parseStatement)))
               <|> SmtWhile <$> (reserved "while" *> (parens parseExpression)) <*> (braces (many parseStatement))
               <|> SmtRet <$> (reserved "return" *> parseExpression <* semi)
-              <|> SmtFork <$> (reserved "fork" *> (parens (commaSep identifier))) <*> (braces (many parseStatement)) <*> (braces (many parseStatement))
+              <|> SmtFork <$> (reserved "fork" *> (parens (commaSep parseExpression))) <*> (braces (many parseStatement)) <*> (braces (many parseStatement))
               <|> SmtLock <$> (reserved "lock" *> identifier <* semi)
               <|> SmtUnlock <$> (reserved "unlock" *> identifier <* semi)
               <|> try (SmtDef <$> parseDefinition)
@@ -119,8 +119,8 @@ initStatement stm@(SmtWhile e stms) scopes =
                 else error ("Type error in while condition!")
                 where res = initScope stms (scopes ++ [[]])
 
-initStatement stm@(SmtFork ids s1 s2) scopes =
-            if checkForkParams ids scopes
+initStatement stm@(SmtFork exprs s1 s2) scopes =
+            if checkForkParams exprs scopes
             then
                 if checkForkLocks ids s1 && checkForkLocks ids s2
                 then scopes ++ res1 ++ res2
@@ -128,7 +128,8 @@ initStatement stm@(SmtFork ids s1 s2) scopes =
             else error ("Fork arguments have not been initialized before!")
             where res1 = initScope s1 lut
                   res2 = initScope s2 lut
-                  lut = [[] ++ (map (\x -> let (Right def) = getDefinition x scopes in (x, def)) ids)]
+                  lut = [[] ++ (map (\(ExprVar x) -> let (Right def) = getDefinition x scopes in (x, def)) exprs)]
+                  ids = getIdsFromVars exprs
 
 
 initStatement stm@(SmtLock e) scopes = scopes
@@ -199,14 +200,21 @@ checkExpr (ExprVar id) scopes exprType =
 
 ----------------- HELPERS
 
-checkForkParams ids scopes = and (map (\x -> getDefinition x scopes /= Left defNotFound) ids)
+checkForkParams exprs scopes = and( map isExprVar exprs) && and (map (\(ExprVar id) -> getDefinition id scopes /= Left defNotFound) exprs)
+
+getIdsFromVars [] = []
+getIdsFromVars ((ExprVar id):xs) = id : (getIdsFromVars xs)
+
+isExprVar (ExprVar id) = True
+isExprVar _ = False
 
 checkForkLocks ids [] = True
 checkForkLocks ids ((SmtLock id):statements) = (id `elem` ids) && checkForkLocks ids statements
 checkForkLocks ids ((SmtUnlock id):statements) = (id `elem` ids) && checkForkLocks ids statements
 checkForkLocks ids ((SmtIf e s1 s2):statements) = checkForkLocks ids s1 && checkForkLocks ids s2 && checkForkLocks ids statements
 checkForkLocks ids ((SmtWhile e s):statements) = checkForkLocks ids s && checkForkLocks ids statements
-checkForkLocks ids ((SmtFork i s1 s2):statements) = checkForkLocks (ids ++ i) s1 && checkForkLocks (ids ++ i) s2 && checkForkLocks ids statements
+checkForkLocks ids ((SmtFork exprs s1 s2):statements) = checkForkLocks (ids ++ i) s1 && checkForkLocks (ids ++ i) s2 && checkForkLocks ids statements
+                    where i = getIdsFromVars exprs
 checkForkLocks ids ((SmtDef (FunctionDef a id params s):statements)) = checkForkLocks ids s && checkForkLocks ids statements
 checkForkLocks ids (_:statements) = checkForkLocks ids statements
 

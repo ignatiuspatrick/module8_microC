@@ -89,7 +89,7 @@ data Statement = SmtDef Definition
                | SmtRet Expression
                | SmtAss String Expression
                | SmtCall String [Expression]
-               | SmtFork [String] [Statement] [Statement]
+               | SmtFork [Expression] [Statement] [Statement]
                | SmtLock String
                | SmtUnlock String
                 deriving (Show, Eq)

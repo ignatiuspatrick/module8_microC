@@ -12,14 +12,14 @@ import Debug.Trace
 
 ------------- COMPILE PROGRAM
 -- lut must be an empty array, program ss is a result of parsing, and arp is 0
-compileProg :: Program -> [[(String, Integer, Statement, Integer)]] -> Int -> [[Instruction]]
-compileProg (Program ss) lut arp = [res] where res = [ Load (ImmValue (fromIntegral arp)) regF ] ++ (compileListStat ss lut arp) ++ [ WriteInstr regA numberIO , EndProg ]
+compileProg :: Program -> [[(String, Integer, Statement, Integer)]] -> Int -> [[(String, Int)]] -> [[Instruction]]
+compileProg (Program ss) lut arp shared = [res] where res = [ Load (ImmValue (fromIntegral arp)) regF ] ++ (compileListStat ss lut arp shared) ++ [ WriteInstr regA numberIO , EndProg ]
 
 
 
 ------------- COMPILE LIST OF STATEMENTS
-compileListStat [] lut arp = []
-compileListStat (s:ss) lut arp = (compileStat s newlut arp) ++ (compileListStat ss newlut arp)
+compileListStat [] lut arp shared = []
+compileListStat (s:ss) lut arp shared = (compileStat s newlut arp shared) ++ (compileListStat ss newlut arp shared)
             where newlut = (generateLutSt s lut)
 
 
@@ -28,8 +28,8 @@ compileListStat (s:ss) lut arp = (compileStat s newlut arp) ++ (compileListStat 
 
 
 ------------- COMPILE STATEMENT
-compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [Instruction]
-compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = (compileExpr arp e lut) ++
+compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [[(String, Int)]] -> [Instruction]
+compileStat s@(SmtDef (VariableDef _ _ e)) lut arp shared = (compileExpr arp e lut shared) ++
             [
                 Pop regA
                 , Store regA (DirAddr memad)
@@ -37,38 +37,37 @@ compileStat s@(SmtDef (VariableDef _ _ e)) lut arp = (compileExpr arp e lut) ++
             where memad = fromIntegral ((fromIntegral arp) + offset) -- points to the caller's arp
                   (_,offset,_,_) = (last (last lut))
 
-compileStat s@(SmtDef (FunctionDef _ _ _ _)) lut arp = []
-compileStat s@(SmtIf e strue sfalse) lut arp = (compileExpr arp e lut) ++
+compileStat s@(SmtDef (FunctionDef _ _ _ _)) lut arp shared = []
+compileStat s@(SmtIf e strue sfalse) lut arp shared = (compileExpr arp e lut shared) ++
             [
                 Pop regA -- regA result might be 0 or 1
                 , Branch regA (Rel (lenfalse+1))
             ] ++ insfalse ++ instrue
             where newlut = (generateLutSt s lut) -- evaluate later on
-                  instrue = compileListStat strue newlut arp
+                  instrue = compileListStat strue newlut arp shared
                   lentrue = (length instrue)
-                  insfalse = (compileListStat sfalse newlut arp) ++ [ Jump (Rel (lentrue+1)) ]
+                  insfalse = (compileListStat sfalse newlut arp shared) ++ [ Jump (Rel (lentrue+1)) ]
                   lenfalse = (length insfalse)
 
-compileStat s@(SmtWhile e sloop) lut arp = (compileExpr arp e lut) ++
+compileStat s@(SmtWhile e sloop) lut arp shared = (compileExpr arp e lut shared) ++
             [
                 Pop regA
                 , Branch regA (Rel 2)
                 , Jump (Rel (lenloop + 1))
             ] ++ insloop
             where newlut = (generateLutSt s lut) --evaluate later on arp
-                  insloop = compileListStat sloop newlut arp ++ [ Jump (Rel (negate (lenloop + 1)))]
+                  insloop = compileListStat sloop newlut arp shared ++ [ Jump (Rel (negate (lenloop + 1)))]
                   lenloop = (length insloop)
 
-compileStat s@(SmtFork es s1 s2) lut arp = []
 
 
-compileStat s@(SmtRet e) lut arp = (compileExpr arp e lut) ++
+compileStat s@(SmtRet e) lut arp shared = (compileExpr arp e lut shared) ++
             [
                 Pop regA
                 , Store regA (DirAddr addr)
             ] where addr = (fromIntegral arp - 2)
 
-compileStat s@(SmtAss id e) lut arp = (compileExpr arp e newlut) ++
+compileStat s@(SmtAss id e) lut arp shared = (compileExpr arp e newlut shared) ++
             getPathToAR id lut ++
             [
                 Load (ImmValue offset) regC
@@ -79,14 +78,14 @@ compileStat s@(SmtAss id e) lut arp = (compileExpr arp e newlut) ++
             where newlut = generateLutEx e lut
                   offset = fromIntegral (getOffsetById id (reverse newlut))
 
-compileStat s@(SmtCall id exprs) lut arp =
-                (concat (map (\x -> compileExpr arp x lut) exprs)) ++     -- compile arguments
+compileStat s@(SmtCall id exprs) lut arp shared =
+                (concat (map (\x -> compileExpr arp x lut shared) exprs)) ++     -- compile arguments
                 [
                     Load (ImmValue newarp) regF                         -- load new arp into regF
                     , Store regF (ImmValue arp)                       -- store caller arp in correct place
                 ] ++
                 loadParam len newarp ++                                  -- load in params into their field
-                (compileListStat ss lut newarp) ++ [                     -- generate code for the function
+                (compileListStat ss lut newarp shared) ++ [                     -- generate code for the function
                     Load (ImmValue arp) regF                            -- restore arp
                 ]
                 where len = toInteger (length exprs)
@@ -96,8 +95,10 @@ compileStat s@(SmtCall id exprs) lut arp =
                       (SmtDef (FunctionDef t s ps ss)) = getStatementFromLut (fromIntegral n) id lut
 
 
-compileStat s@(SmtLock id) lut arp = []
-compileStat s@(SmtUnlock id) lut arp = []
+
+compileStat s@(SmtFork ids s1 s2) lut arp shared = []
+compileStat s@(SmtLock id) lut arp shared = []
+compileStat s@(SmtUnlock id) lut arp shared = []
 
 
 
@@ -107,28 +108,28 @@ compileStat s@(SmtUnlock id) lut arp = []
 
 ------------- COMPILE EXPRESSION
 
-compileExpr :: Int -> Expression -> [[(String, Integer, Statement, Integer)]] -> [Instruction]
-compileExpr arp (ExprConst a) lut =
+compileExpr :: Int -> Expression -> [[(String, Integer, Statement, Integer)]] -> [[(String, Int)]] -> [Instruction]
+compileExpr arp (ExprConst a) lut shared =
         [
                 Load (ImmValue (fromIntegral a)) regA -- load a into register 0
                 , Push regA -- push into register A
         ]
 
 -- for true put 1, and for false put 0
-compileExpr arp (ExprTrue _) lut =
+compileExpr arp (ExprTrue _) lut shared =
         [
                 Load (ImmValue (intBool True)) regA
                 , Push regA
         ]
 
-compileExpr arp (ExprFalse _) lut =
+compileExpr arp (ExprFalse _) lut shared =
         [
                 Load (ImmValue (intBool False)) regA
                 , Push regA
         ]
 
 -- find id in lut, get offset, get arp, add offset to arp, load result -> regA
-compileExpr arp (ExprVar id) lut =
+compileExpr arp (ExprVar id) lut shared =
         getPathToAR id lut ++
         [
             Load (ImmValue offset) regC
@@ -139,7 +140,7 @@ compileExpr arp (ExprVar id) lut =
         where offset = (fromIntegral (getOffsetById id (reverse lut)))
 
 
-compileExpr arp(ExprAdd a b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
+compileExpr arp(ExprAdd a b) lut shared = (compileExpr arp a lut shared) ++ (compileExpr arp b lut shared) ++
         [
             Pop regA
             , Pop regB
@@ -147,7 +148,7 @@ compileExpr arp(ExprAdd a b) lut = (compileExpr arp a lut) ++ (compileExpr arp b
             , Push regC
         ]
 
-compileExpr arp (ExprSubtract a b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
+compileExpr arp (ExprSubtract a b) lut shared = (compileExpr arp a lut shared) ++ (compileExpr arp b lut shared) ++
         [
             Pop regA
             , Pop regB
@@ -155,7 +156,7 @@ compileExpr arp (ExprSubtract a b) lut = (compileExpr arp a lut) ++ (compileExpr
             , Push regC
         ]
 
-compileExpr arp (ExprMult a b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
+compileExpr arp (ExprMult a b) lut shared = (compileExpr arp a lut shared) ++ (compileExpr arp b lut shared) ++
         [
             Pop regA
             , Pop regB
@@ -163,9 +164,9 @@ compileExpr arp (ExprMult a b) lut = (compileExpr arp a lut) ++ (compileExpr arp
             , Push regC
         ]
 
-compileExpr arp (ExprBrac a) lut = (compileExpr arp a lut)
+compileExpr arp (ExprBrac a) lut shared = (compileExpr arp a lut shared)
 
-compileExpr arp (ExprBool a ord b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
+compileExpr arp (ExprBool a ord b) lut shared = (compileExpr arp a lut shared) ++ (compileExpr arp b lut shared) ++
         [
             Pop regA
             , Pop regB
@@ -174,7 +175,7 @@ compileExpr arp (ExprBool a ord b) lut = (compileExpr arp a lut) ++ (compileExpr
         ]
         where cmpOp = getCmpOp ord
 
-compileExpr arp (ExprBin a bin b) lut = (compileExpr arp a lut) ++ (compileExpr arp b lut) ++
+compileExpr arp (ExprBin a bin b) lut shared = (compileExpr arp a lut shared) ++ (compileExpr arp b lut shared) ++
         [
             Pop regA
             , Pop regB
@@ -185,14 +186,14 @@ compileExpr arp (ExprBin a bin b) lut = (compileExpr arp a lut) ++ (compileExpr 
 
 
 
-compileExpr arp e@(ExprCall id exprs) lut  =
-        (concat (map (\x -> compileExpr arp x lut) exprs)) ++     -- compile arguments
+compileExpr arp e@(ExprCall id exprs) lut shared =
+        (concat (map (\x -> compileExpr arp x lut shared) exprs)) ++     -- compile arguments
         [
             Load (ImmValue newarp) regF                         -- load new arp into regF
             , Store regF (ImmValue arp)                       -- store caller arp in correct place
         ] ++
         loadParam len newarp ++                                  -- load in params into their field
-        (compileListStat ss newlut newarp) ++ [                     -- generate code for the function
+        (compileListStat ss newlut newarp shared) ++ [                     -- generate code for the function
             Load (DirAddr retVal) regA                         -- get ret value
             , Push regA
             , Load (ImmValue arp) regF                            -- restore arp
