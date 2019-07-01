@@ -12,7 +12,7 @@ import Debug.Trace
 
 ------------- COMPILE PROGRAM
 -- lut must be an empty array, program ss is a result of parsing, and arp is 0
-compileProg :: Program -> [[(String, Integer, Statement, Integer)]] -> Int -> [[(String, Int)]] -> [[Instruction]]
+compileProg :: Program -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [[Instruction]]
 compileProg (Program ss) lut arp shared =
             map (++ [ WriteInstr regA numberIO , EndProg ]) res
                 where res = (compileListStat ss lut arp shared [[ Load (ImmValue (fromIntegral arp)) regF ]] 0)
@@ -20,10 +20,12 @@ compileProg (Program ss) lut arp shared =
 
 
 ------------- COMPILE LIST OF STATEMENTS
-compileListStat :: [Statement] -> [[(String, Integer, Statement, Integer)]] -> Int -> [[(String, Int)]] -> [[Instruction]] -> Int -> [[Instruction]]
+compileListStat :: [Statement] -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
 compileListStat [] lut arp shared instr threadNo = instr
-compileListStat (s:ss) lut arp shared instr threadNo = (compileListStat ss newlut arp shared (compileStat s newlut arp shared instr threadNo) threadNo)
+compileListStat (s:ss) lut arp shared instr threadNo =
+        (compileListStat ss newlut arp shared newInstr threadNo)
             where newlut = (generateLutSt s lut)
+                  newInstr = (compileStat s newlut arp shared instr threadNo)
 
 
 
@@ -31,7 +33,7 @@ compileListStat (s:ss) lut arp shared instr threadNo = (compileListStat ss newlu
 
 
 ------------- COMPILE STATEMENT
-compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [[(String, Int)]] -> [[Instruction]] -> Int -> [[Instruction]]
+compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
 compileStat s@(SmtDef (VariableDef _ _ e)) lut arp shared instr threadNo = appendToList res threadNo
              [
                 Pop regA
@@ -44,7 +46,8 @@ compileStat s@(SmtDef (VariableDef _ _ e)) lut arp shared instr threadNo = appen
 compileStat s@(SmtDef (FunctionDef _ _ _ _)) lut arp shared instr threadNo = instr
 compileStat s@(SmtIf e strue sfalse) lut arp shared instr threadNo = instrue
             where newlut = (generateLutSt s lut) -- evaluate later on
-                  exprInstr = appendToList (compileExpr arp e lut shared instr threadNo) threadNo
+                  iE = (compileExpr arp e lut shared instr threadNo)
+                  exprInstr = appendToList iE threadNo
                         [
                            Pop regA -- regA result might be 0 or 1
                            , Branch regA (Rel (lenfalse+1))
@@ -73,16 +76,20 @@ compileStat s@(SmtRet e) lut arp shared instr threadNo = appendToList (compileEx
                 , Store regA (DirAddr addr)
             ] where addr = (fromIntegral arp - 2)
 
-compileStat s@(SmtAss id e) lut arp shared instr threadNo = appendToList (compileExpr arp e newlut shared instr threadNo) threadNo
-            (getPathToAR id lut ++
-            [
-                Load (ImmValue offset) regC
-                , Compute Add regC regE regE
-                , Pop regA
-                , Store regA (IndAddr regE)
-            ])
+compileStat s@(SmtAss id e) lut arp shared instr threadNo =
+            appendToList (compileExpr arp e newlut shared instr threadNo) threadNo
+                (if inShared id shared then getFromShared else getFromLocal)
             where newlut = generateLutEx e lut
                   offset = fromIntegral (getOffsetById id (reverse newlut))
+                  getFromLocal = (getPathToAR id lut ++
+                                             [
+                                                 Load (ImmValue offset) regC
+                                                 , Compute Add regC regE regE
+                                                 , Pop regA
+                                                 , Store regA (IndAddr regE)
+                                             ])
+                  getFromShared = [ Pop regA, WriteInstr regA (DirAddr addr)]
+                  addr = getSharedAddr id shared
 
 compileStat s@(SmtCall id exprs) lut arp shared instr threadNo =
                 appendToList (compileListStat ss lut newarp shared exprIntrs threadNo) threadNo   -- generate code for the function
@@ -104,22 +111,60 @@ compileStat s@(SmtCall id exprs) lut arp shared instr threadNo =
 
 
 compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
-                appendToList second threadNo (moveFromSharedToLocal exprs lut arp newShared)
+                appendToList secondWithWait threadNo (moveFromSharedToLocal exprs lut arp newShared)
                     where newShared = prepToMoveIntoShared exprs lut arp shared
-                          moved = appendToList instr threadNo (moveToSharedMemory exprs lut arp newShared)
-                          first = compileListStat s1 lut arp shared moved threadNo
-                          second = compileListStat s2 lut arp shared first (threadNo + 1)
+                          moved = appendToList instr threadNo ((moveToSharedMemory exprs lut arp newShared) ++ [WriteInstr reg0 (DirAddr 0)])
+                          first = compileListStat s1 lut arp newShared moved threadNo
+                          firstWithWait = appendToList first threadNo [ TestAndSet (DirAddr 0), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]
+                          prepped = (firstWithWait ++ [[ TestAndSet (DirAddr 0), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]])
+                          second = compileListStat s2 lut arp newShared prepped (threadNo + 1)
+                          secondWithWait = appendToList second (threadNo+1) [ WriteInstr reg0 (DirAddr 0) ]
 
 
 compileStat s@(SmtLock id) lut arp shared instr threadNo = []
 compileStat s@(SmtUnlock id) lut arp shared instr threadNo = []
 
 
-moveToSharedMemory :: [Expression] -> [[(String, Integer, Statement, Integer)]] -> Int -> [[(String, Int)]] -> [Instruction]
-moveToSharedMemory exprs lut arp newShared = []
+moveToSharedMemory :: [Expression] -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [Instruction]
+moveToSharedMemory exprs lut arp shared =
+            concat (map (\x -> getVarToMem x lut shared) ids)
+                    where ids = getIdsFromVars exprs
 
-moveFromSharedToLocal :: [Expression] -> [[(String, Integer, Statement, Integer)]] -> Int -> [[(String, Int)]] -> [Instruction]
-moveFromSharedToLocal exprs lut arp newShared = []
+moveFromSharedToLocal :: [Expression] -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [Instruction]
+moveFromSharedToLocal exprs lut arp shared =
+            concat (map (\x -> getVarToLocal x lut shared) ids)
+                    where ids = getIdsFromVars exprs
+
+
+getVarToLocal id lut shared =
+        (getPathToAR id lut ++
+        [
+            Load (ImmValue offset) regC
+            , Compute Add regC regE regE
+            , ReadInstr (DirAddr addr)
+            , Receive regA
+            , Store regA (IndAddr regE) -- store at calculated dir
+        ])
+        where addr = findInShared id shared
+              offset = (fromIntegral (getOffsetById id (reverse lut)))
+
+
+getVarToMem id lut shared =
+        (getPathToAR id lut ++
+        [
+            Load (ImmValue offset) regC
+            , Compute Add regC regE regE
+            , Load (IndAddr regE) regA
+            , WriteInstr regA (DirAddr addr)
+            , WriteInstr reg0 (DirAddr (addr+1))
+            , WriteInstr reg0 (DirAddr (addr+2))
+        ])
+        where addr = findInShared id shared
+              offset = (fromIntegral (getOffsetById id (reverse lut)))
+
+
+findInShared id ((x, addr):shared) = if x == id then addr else findInShared id shared
+
 
 
 
@@ -128,17 +173,18 @@ moveFromSharedToLocal exprs lut arp newShared = []
 
 ------------- COMPILE LIST EXPRESSION
 
-compileListExprs :: Int -> [Expression] -> [[(String, Integer, Statement, Integer)]] -> [[(String, Int)]] -> [[Instruction]] -> Int -> [[Instruction]]
-compileListExprs arp (e:exprs) lut shared instr threadNo =
-            compileListExprs arp (exprs) lut shared (compileExpr arp e lut shared instr threadNo) threadNo
+compileListExprs :: Int -> [Expression] -> [[(String, Integer, Statement, Integer)]] -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
+compileListExprs arp [] lut shared instr threadNo = instr
+compileListExprs arp (e:exprs) lut shared instr threadNo = res
+            where res = compileListExprs arp (exprs) lut shared (compileExpr arp e lut shared instr threadNo) threadNo
 
 
 
 
 ------------- COMPILE EXPRESSION
 
-compileExpr :: Int -> Expression -> [[(String, Integer, Statement, Integer)]] -> [[(String, Int)]] -> [[Instruction]] -> Int -> [[Instruction]]
-compileExpr arp (ExprConst a) lut shared  instr threadNo =
+compileExpr :: Int -> Expression -> [[(String, Integer, Statement, Integer)]] -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
+compileExpr arp (ExprConst a) lut shared instr threadNo =
         appendToList instr threadNo
         [
                 Load (ImmValue (fromIntegral a)) regA -- load a into register 0
@@ -146,14 +192,14 @@ compileExpr arp (ExprConst a) lut shared  instr threadNo =
         ]
 
 -- for true put 1, and for false put 0
-compileExpr arp (ExprTrue _) lut shared  instr threadNo =
+compileExpr arp (ExprTrue _) lut shared instr threadNo =
         appendToList instr threadNo
         [
                 Load (ImmValue (intBool True)) regA
                 , Push regA
         ]
 
-compileExpr arp (ExprFalse _) lut shared  instr threadNo =
+compileExpr arp (ExprFalse _) lut shared instr threadNo =
         appendToList instr threadNo
         [
                 Load (ImmValue (intBool False)) regA
@@ -161,19 +207,21 @@ compileExpr arp (ExprFalse _) lut shared  instr threadNo =
         ]
 
 -- find id in lut, get offset, get arp, add offset to arp, load result -> regA
-compileExpr arp (ExprVar id) lut shared  instr threadNo =
-        appendToList instr threadNo
-        (getPathToAR id lut ++
-        [
-            Load (ImmValue offset) regC
-            , Compute Add regC regE regE
-            , Load (IndAddr regE) regA -- change a later with the offset
-            , Push regA
-        ])
+compileExpr arp (ExprVar id) lut shared instr threadNo =
+        appendToList instr threadNo (if inShared id shared then getFromShared else getFromLocal)
         where offset = (fromIntegral (getOffsetById id (reverse lut)))
+              getFromLocal = (getPathToAR id lut ++
+                                   [
+                                       Load (ImmValue offset) regC
+                                       , Compute Add regC regE regE
+                                       , Load (IndAddr regE) regA -- change a later with the offset
+                                       , Push regA
+                                   ])
+              getFromShared = [ ReadInstr (DirAddr addr), Receive regA, Push regA ]
+              addr = getSharedAddr id shared
 
 
-compileExpr arp(ExprAdd a b) lut shared  instr threadNo =
+compileExpr arp(ExprAdd a b) lut shared instr threadNo =
         appendToList add2 threadNo
         [
             Pop regA
@@ -208,7 +256,7 @@ compileExpr arp (ExprMult a b) lut shared instr threadNo =
 
 compileExpr arp (ExprBrac a) lut shared instr threadNo = (compileExpr arp a lut shared instr threadNo)
 
-compileExpr arp (ExprBool a ord b) lut shared  instr threadNo = (compileExpr arp a lut shared  instr threadNo) ++ (compileExpr arp b lut shared  instr threadNo) ++
+compileExpr arp (ExprBool a ord b) lut shared  instr threadNo =
         appendToList bool2 threadNo
         [
             Pop regA
@@ -220,7 +268,7 @@ compileExpr arp (ExprBool a ord b) lut shared  instr threadNo = (compileExpr arp
               bool1 = compileExpr arp a lut shared instr threadNo
               bool2 = compileExpr arp b lut shared bool1 threadNo
 
-compileExpr arp (ExprBin a bin b) lut shared  instr threadNo = (compileExpr arp a lut shared  instr threadNo) ++ (compileExpr arp b lut shared  instr threadNo) ++
+compileExpr arp (ExprBin a bin b) lut shared  instr threadNo =
         appendToList bin2 threadNo
         [
             Pop regA
@@ -253,6 +301,10 @@ compileExpr arp e@(ExprCall id exprs) lut shared instr threadNo =
 
 
 ------------- HELPERS
+
+inShared id [] = False
+inShared id ((s, _):shared) = if id == s then True else inShared id shared
+getSharedAddr id ((s, addr):shared) = if id == s then addr else getSharedAddr id shared
 
 loadParam :: Integer -> Int -> [Instruction]
 loadParam 0 arp = []
@@ -300,7 +352,8 @@ getChangeInN id (((a,b,c,d):xs):xss) currentN
 
 appendToList :: [[Instruction]] -> Int -> [Instruction] -> [[Instruction]]
 appendToList (xs:xss) 0 list = (xs ++ list) : xss
-appendToList (xs:xss) n list = xs : (appendToList xss (n-1) list)
+appendToList s@(xs:xss) n list = xs : (appendToList xss (n-1) list)
+
 
 ------------- TESTING
 

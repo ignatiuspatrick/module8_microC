@@ -5,6 +5,8 @@ Final project for programming paradigms.
 
 
 ## Issue tracker
+add dummy def so threaded local stuff doesn't overwrite
+
 [+] - comments
 [+] - fork/join
 [+] - lock/unlock

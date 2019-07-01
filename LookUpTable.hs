@@ -62,5 +62,7 @@ helperGetStatement (((a,_,c,_):xs):xss) id
  | otherwise = helperGetStatement (xs:xss) id
 
 
+spaceInSharedMemForVar = 3
 
-prepToMoveIntoShared exprs lut arp shared = shared
+prepToMoveIntoShared [] lut arp shared = reverse shared
+prepToMoveIntoShared ((ExprVar id):exprs) lut arp shared = prepToMoveIntoShared exprs lut arp ((id, ((length shared) * spaceInSharedMemForVar) + 1) : shared)

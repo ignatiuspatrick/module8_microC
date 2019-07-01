@@ -88,7 +88,7 @@ initStatement stm@(SmtDef (VariableDef a id expr)) scopes =
                 if def == Left defNotFound
                 then (if checkExpr expr scopes (strFromType a)
                     then (init scopes) ++ [((last scopes) ++ [(id, stm)])]
-                    else error("Type error in variable definition! The variable '" ++ id ++ "' has a wrong type."))
+                    else error("Type error in variable definition! The definition of '" ++ id ++ "' is invalid."))
                 else error ("Type error in variable definition! The identifier '" ++ id ++ "' has already been used.")
                 where def = getTopLevelDefinition id scopes
 
