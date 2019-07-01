@@ -11,7 +11,7 @@ function int doStuff() {
 
     int c = 0;
 
-    while (z == false) {
+    while (z == true) {
         c = c + 4;
         if (c >= 10) {
             z = true;

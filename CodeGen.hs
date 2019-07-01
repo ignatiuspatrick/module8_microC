@@ -52,7 +52,8 @@ compileStat s@(SmtIf e strue sfalse) lut arp = (compileExpr arp e lut) ++
 compileStat s@(SmtWhile e sloop) lut arp = (compileExpr arp e lut) ++
             [
                 Pop regA
-                , Branch regA (Rel (lenloop + 1))
+                , Branch regA (Rel 2)
+                , Jump (Rel (lenloop + 1))
             ] ++ insloop
             where newlut = (generateLutSt s lut) --evaluate later on arp
                   insloop = compileListStat sloop newlut arp ++ [ Jump (Rel (negate (lenloop + 1)))]
