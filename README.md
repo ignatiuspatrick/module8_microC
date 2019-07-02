@@ -4,6 +4,14 @@ Final project for programming paradigms.
 [Sprockell](https://github.com/leonschoorl/sprockell/)
 
 
+
+Write the report
+Add some comments
+Add tests and a automatic tester
+Write example programs
+Finish concurrency (lock for test and set, owner for the owenrship and communication at the end of current shared mem)
+
+
 ## Issue tracker
 add dummy def so threaded local stuff doesn't overwrite
 

@@ -59,8 +59,9 @@ compileStat s@(SmtIf e strue sfalse) lut arp shared instr threadNo = instrue
 
 compileStat s@(SmtWhile e sloop) lut arp shared instr threadNo = insloop
             where newlut = (generateLutSt s lut) --evaluate later on arp
-                  insloop = appendToList (compileListStat sloop newlut arp shared exprInstr threadNo) threadNo [ Jump (Rel (negate (lenloop + 1)))]
+                  insloop = appendToList (compileListStat sloop newlut arp shared exprInstr threadNo) threadNo [ Jump (Rel (negate (lenloop + lencond - 1)))]
                   lenloop = (length (insloop !! threadNo)) - (length (exprInstr !! threadNo))
+                  lencond = (length (exprInstr !! threadNo)) - (length (instr !! threadNo))
                   exprInstr = appendToList (compileExpr arp e lut shared instr threadNo) threadNo
                                           [
                                               Pop regA
@@ -111,18 +112,37 @@ compileStat s@(SmtCall id exprs) lut arp shared instr threadNo =
 
 
 compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
-                appendToList secondWithWait threadNo (moveFromSharedToLocal exprs lut arp newShared)
-                    where newShared = prepToMoveIntoShared exprs lut arp shared
-                          moved = appendToList instr threadNo ((moveToSharedMemory exprs lut arp newShared) ++ [WriteInstr reg0 (DirAddr 0)])
-                          first = compileListStat s1 lut arp newShared moved threadNo
-                          firstWithWait = appendToList first threadNo [ TestAndSet (DirAddr 0), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]
-                          prepped = (firstWithWait ++ [[ TestAndSet (DirAddr 0), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]])
-                          second = compileListStat s2 lut arp newShared prepped (threadNo + 1)
-                          secondWithWait = appendToList second (threadNo+1) [ WriteInstr reg0 (DirAddr 0) ]
+        appendToList secondWithWait threadNo (moveFromSharedToLocal exprs lut arp newShared)
+            where newShared = prepToMoveIntoShared exprs lut arp shared
+                  moved = appendToList instr threadNo ((moveToSharedMemory exprs lut arp newShared) ++ [WriteInstr reg0 (DirAddr commAddr)])
+                  first = compileListStat s1 lut arp newShared moved threadNo
+                  firstWithWait = appendToList first threadNo [ TestAndSet (DirAddr commAddr), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]
+                  prepped = (firstWithWait ++ [[ TestAndSet (DirAddr commAddr), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]])
+                  second = compileListStat s2 lut arp newShared prepped (threadNo + 1)
+                  secondWithWait = appendToList second (threadNo+1) [ WriteInstr reg0 (DirAddr commAddr) ]
+                  commAddr = getCommAddr newShared threadNo
 
 
-compileStat s@(SmtLock id) lut arp shared instr threadNo = []
-compileStat s@(SmtUnlock id) lut arp shared instr threadNo = []
+compileStat s@(SmtLock id) lut arp shared instr threadNo =
+        appendToList instr threadNo
+        [
+            TestAndSet (DirAddr lockAddr)
+          , Receive regA
+          , Branch regA (Rel 2)
+          , Jump (Rel (negate 3))
+          , WriteInstr regSprID (DirAddr ownerAddr)
+        ]
+            where addr = findInShared id shared
+                  lockAddr = addr + 1
+                  ownerAddr = addr + 2
+
+compileStat s@(SmtUnlock id) lut arp shared instr threadNo =
+        appendToList instr threadNo
+        [
+            WriteInstr reg0 (DirAddr lockAddr)
+        ]
+            where addr = findInShared id shared
+                  lockAddr = addr + 1
 
 
 moveToSharedMemory :: [Expression] -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [Instruction]
@@ -226,7 +246,7 @@ compileExpr arp(ExprAdd a b) lut shared instr threadNo =
         [
             Pop regA
             , Pop regB
-            , Compute Add regA regB regC
+            , Compute Add regB regA regC
             , Push regC
         ]
         where add1 = compileExpr arp a lut shared instr threadNo
@@ -237,7 +257,7 @@ compileExpr arp (ExprSubtract a b) lut shared instr threadNo =
         [
             Pop regA
             , Pop regB
-            , Compute Sub regA regB regC
+            , Compute Sub regB regA regC
             , Push regC
         ]
         where sub1 = compileExpr arp a lut shared instr threadNo
@@ -248,7 +268,7 @@ compileExpr arp (ExprMult a b) lut shared instr threadNo =
         [
             Pop regA
             , Pop regB
-            , Compute Mul regA regB regC
+            , Compute Mul regB regA regC
             , Push regC
         ]
         where mult1 = compileExpr arp a lut shared instr threadNo
@@ -261,7 +281,7 @@ compileExpr arp (ExprBool a ord b) lut shared  instr threadNo =
         [
             Pop regA
             , Pop regB
-            , Compute cmpOp regA regB regC
+            , Compute cmpOp regB regA regC
             , Push regC
         ]
         where cmpOp = getCmpOp ord
@@ -273,7 +293,7 @@ compileExpr arp (ExprBin a bin b) lut shared  instr threadNo =
         [
             Pop regA
             , Pop regB
-            , Compute binOp regA regB regC
+            , Compute binOp regB regA regC
             , Push regC
         ]
         where binOp = getBinOp bin
@@ -354,6 +374,8 @@ appendToList :: [[Instruction]] -> Int -> [Instruction] -> [[Instruction]]
 appendToList (xs:xss) 0 list = (xs ++ list) : xss
 appendToList s@(xs:xss) n list = xs : (appendToList xss (n-1) list)
 
+
+getCommAddr shared threadNo = ((length shared) * spaceInSharedMemForVar) + (1 * threadNo)
 
 ------------- TESTING
 

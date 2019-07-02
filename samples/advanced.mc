@@ -1,6 +1,6 @@
 int x = 1;
 int y = 10;
-boolean z = true;
+boolean z = false;
 
 function int doStuff() {
     boolean a = true;
@@ -11,7 +11,7 @@ function int doStuff() {
 
     int c = 0;
 
-    while (z == true) {
+    while (z == false) {
         c = c + 4;
         if (c >= 10) {
             z = true;
@@ -19,6 +19,7 @@ function int doStuff() {
     }
     return c;
 }
-if (z){
+
+if (z == false) {
     int c = doStuff();
 }

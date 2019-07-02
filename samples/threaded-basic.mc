@@ -5,18 +5,20 @@ int x = 0;
 function int g () {
     boolean y = true;
     fork (i, x) {
-        boolean z = true;
-        if (z == true) {
-            i = 50;
+        int a = 0;
+        while (a < 1000) {
+            x = x + 1;
+            a = a + 1;
         }
     } {
-        boolean z = true;
-        if (z || true) {
-            x = 30;
+        int a = 0;
+        while (a < 1000) {
+            x = x + 1;
+            a = a + 1;
         }
     }
 
-    return i;
+    return x;
 }
 
 int z = g();
