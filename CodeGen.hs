@@ -89,8 +89,22 @@ compileStat s@(SmtAss id e) lut arp shared instr threadNo =
                                                  , Pop regA
                                                  , Store regA (IndAddr regE)
                                              ])
-                  getFromShared = [ Pop regA, WriteInstr regA (DirAddr addr)]
+                  getFromShared = [
+                                    Pop regC,
+                                    ReadInstr (DirAddr lockAddr),
+                                    Receive regA,
+                                    Branch regA (Rel 2),
+                                    Jump (Rel 6),
+                                    ReadInstr (DirAddr ownerAddr),
+                                    Receive regA,
+                                    Compute Equal regA regSprID regA,
+                                    Branch regA (Rel 2),
+                                    Jump (Rel (negate 8)),
+                                    WriteInstr regA (DirAddr addr)
+                                  ]
                   addr = getSharedAddr id shared
+                  lockAddr = addr + 1
+                  ownerAddr = addr + 2
 
 compileStat s@(SmtCall id exprs) lut arp shared instr threadNo =
                 appendToList (compileListStat ss lut newarp shared exprIntrs threadNo) threadNo   -- generate code for the function
@@ -139,10 +153,13 @@ compileStat s@(SmtLock id) lut arp shared instr threadNo =
 compileStat s@(SmtUnlock id) lut arp shared instr threadNo =
         appendToList instr threadNo
         [
-            WriteInstr reg0 (DirAddr lockAddr)
+            WriteInstr reg0 (DirAddr lockAddr),
+            Load (ImmValue (negate 1)) regA,
+            WriteInstr regA (DirAddr ownerAddr)
         ]
             where addr = findInShared id shared
                   lockAddr = addr + 1
+                  ownerAddr = addr + 2
 
 
 moveToSharedMemory :: [Expression] -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [Instruction]
@@ -237,8 +254,20 @@ compileExpr arp (ExprVar id) lut shared instr threadNo =
                                        , Load (IndAddr regE) regA -- change a later with the offset
                                        , Push regA
                                    ])
-              getFromShared = [ ReadInstr (DirAddr addr), Receive regA, Push regA ]
+              getFromShared = [
+                                ReadInstr (DirAddr lockAddr),
+                                Receive regA,
+                                Branch regA (Rel 2),
+                                Jump (Rel 6),
+                                ReadInstr (DirAddr ownerAddr),
+                                Receive regA,
+                                Compute Equal regA regSprID regA,
+                                Branch regA (Rel 2),
+                                Jump (Rel (negate 8))
+                              ]
               addr = getSharedAddr id shared
+              lockAddr = addr + 1
+              ownerAddr = addr + 2
 
 
 compileExpr arp(ExprAdd a b) lut shared instr threadNo =
@@ -336,9 +365,6 @@ loadParam n arp =
             , Store regA (IndAddr regB)
         ] ++ loadParam (n-1) arp
 
-
--- since a code is for one time, then one lut is for one piece of code
--- the construction is from top to bottom, execution refers to the called function
 
 getCmpOp (OrderLT _) = Lt
 getCmpOp (OrderLE _) = LtE
