@@ -16,8 +16,12 @@ generateLutSt s@(SmtDef (FunctionDef _ a _ _)) lut = (init lut) ++ [((last lut))
             where n = (getFuncIndex (reverse lut))
 
 
-generateLutSt s@(SmtCall _ _) lut = lut ++ [[("#", 0, SmtDef (FunctionDef (IntType ()) "#" [(Param (IntType()) "&")] []),  n)]]
+generateLutSt (SmtCall s exprs) lut = lut ++ [defs]
              where  n = toInteger (length lut)
+                    dummy = [("#", 0, SmtDef (FunctionDef (IntType ()) "#" [(Param (IntType()) "&")] []),  n)]
+                    paramDefs = generateDefsForParams exprs params lut n
+                    defs = dummy ++ paramDefs
+                    (SmtDef (FunctionDef _ _ params _)) = getStatementFromLut  ((fromIntegral n) - 1) s lut
 
 generateLutSt s@(SmtIf _ _ _) lut = lut ++ [[]]
 generateLutSt s@(SmtWhile _ _) lut = lut ++ [[]]
@@ -28,12 +32,19 @@ generateLutSt _ lut = lut
 
 fixUpLut (ExprCall s _) lut = (init lut)
 
-generateLutEx (ExprCall s _) lut = lut ++
-            [[("#", 0, SmtDef (FunctionDef (IntType ()) "#" [(Param (IntType()) "&")] []),  n)]]
+generateLutEx (ExprCall s exprs) lut = lut ++ [defs]
             where n =  toInteger (length lut)
+                  dummy = [("#", 0, SmtDef (FunctionDef (IntType ()) "#" [(Param (IntType()) "&")] []),  n)]
+                  paramDefs = generateDefsForParams exprs params lut n
+                  defs = dummy ++ paramDefs
+                  (SmtDef (FunctionDef _ _ params _)) = getStatementFromLut  ((fromIntegral n) - 1) s lut
 
 generateLutEx _ lut = lut
 
+generateDefsForParams :: [Expression] -> [Param] -> [[(String, Integer, Statement, Integer)]] -> Integer -> [(String, Integer, Statement, Integer)]
+generateDefsForParams [] [] lut n = []
+generateDefsForParams (e:exprs) p@((Param a id):params) lut n = (id, offset, (SmtDef (VariableDef a id e)), n) : generateDefsForParams exprs params lut n
+        where offset = toInteger (negate (2 + (length p)))
 
 
 

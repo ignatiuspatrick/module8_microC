@@ -414,6 +414,7 @@ getPathToAR id lut =
 
 
 getChangeInN :: String -> [[(String, Integer, Statement, Integer)]] -> Integer -> Int
+getChangeInN id [] n = 0
 getChangeInN id ([]:xss) n = getChangeInN id (xss) n
 getChangeInN id (((a,b,c,d):xs):xss) currentN
     | d /= currentN = 1 + (getChangeInN id (((a,b,c,d):xs):xss) d)
