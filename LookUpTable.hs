@@ -64,5 +64,11 @@ helperGetStatement (((a,_,c,_):xs):xss) id
 
 spaceInSharedMemForVar = 3
 
-prepToMoveIntoShared [] lut arp shared = reverse shared
-prepToMoveIntoShared ((ExprVar id):exprs) lut arp shared = prepToMoveIntoShared exprs lut arp ((id, ((length shared) * spaceInSharedMemForVar)) : shared)
+movetToShared (SmtFork ids s1 s2) lut arp shared threadNo = prepToMoveIntoShared ids lut arp shared threadNo
+movetToShared _ _ _ shared threadNo = shared
+
+prepToMoveIntoShared [] lut arp shared threadNo = shared
+prepToMoveIntoShared ((ExprVar id):exprs) lut arp shared threadNo =
+        if and (map (\(x, _) -> x /= id) shared)
+        then prepToMoveIntoShared exprs lut arp ((id, (((length shared) * spaceInSharedMemForVar) + threadNo)) : shared) threadNo
+        else prepToMoveIntoShared exprs lut arp shared threadNo

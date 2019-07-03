@@ -6,10 +6,12 @@ Final project for programming paradigms.
 
 
 Write the report
-Add some comments
-Add tests and a automatic tester
-Write example programs
-Finish concurrency (lock for test and set, owner for the owenrship and communication at the end of current shared mem)
+
+Add some comments - after examples
+
+Add tests and a automatic tester 
+
+Write example programs - now
 
 
 ## Issue tracker

@@ -4,10 +4,12 @@ int x = 0;
 
 function int g () {
     boolean y = true;
-    fork (i, x) {
-        int a = 0;
+    int a = 0;
 
-        fork (a) {
+    fork (a, x) {
+        a = 33;
+        int b = 0;
+        fork (a, b) {
             lock a;
             a = 10;
             unlock a;
@@ -15,10 +17,19 @@ function int g () {
             lock a;
             a = 50;
             unlock a;
+
+            int c = 0;
+            fork (a, c) {
+                lock a;
+                a = 50;
+                unlock a;
+            } {
+                lock a;
+                a = 10;
+                unlock a;
+            }
         }
-        x = a;
     } {
-        int a = 0;
         while (a < 1000) {
             x = x + 1;
             a = a + 1;

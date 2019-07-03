@@ -100,7 +100,7 @@ compileStat s@(SmtAss id e) lut arp shared instr threadNo =
                                     Compute Equal regA regSprID regA,
                                     Branch regA (Rel 2),
                                     Jump (Rel (negate 8)),
-                                    WriteInstr regA (DirAddr addr)
+                                    WriteInstr regC (DirAddr addr)
                                   ]
                   addr = getSharedAddr id shared
                   lockAddr = addr + 1
@@ -126,15 +126,37 @@ compileStat s@(SmtCall id exprs) lut arp shared instr threadNo =
 
 
 compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
-        appendToList secondWithWait threadNo (moveFromSharedToLocal exprs lut arp newShared)
-            where newShared = prepToMoveIntoShared exprs lut arp shared
-                  moved = appendToList instr threadNo ((moveToSharedMemory exprs lut arp newShared) ++ [WriteInstr reg0 (DirAddr commAddr)])
-                  first = compileListStat s1 lut arp newShared moved threadNo
-                  firstWithWait = appendToList first threadNo [ TestAndSet (DirAddr commAddr), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]
-                  prepped = (firstWithWait ++ [[ TestAndSet (DirAddr commAddr), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]])
-                  second = compileListStat s2 lut arp newShared prepped (threadNo + 1)
-                  secondWithWait = appendToList second (threadNo+1) [ WriteInstr reg0 (DirAddr commAddr) ]
-                  commAddr = getCommAddr newShared threadNo
+        appendToList second threadNo (moveFromSharedToLocal exprs lut arp newShared)
+            where newShared = movetToShared s lut arp shared t1
+                  t1 = length instr
+                  t2 = (length instr) + 1
+                  moved = trace("shared " ++ (show newShared)) $ appendToList instr threadNo (moveToSharedMemory exprs lut arp newShared)
+                  mainWithRelease = appendToList moved threadNo [WriteInstr reg0 (DirAddr commAddr1), WriteInstr reg0 (DirAddr commAddr2)]
+                  mainWithWait = appendToList mainWithRelease threadNo [
+                                                                ReadInstr (DirAddr commAddr1),
+                                                                Receive regA,
+                                                                Load (ImmValue (negate 1)) regC,
+                                                                Compute Equal regA regC regA,
+                                                                Branch regA (Rel 2),
+                                                                Jump (Rel (negate 5)),
+
+                                                                ReadInstr (DirAddr commAddr2),
+                                                                Receive regA,
+                                                                Load (ImmValue (negate 1)) regC,
+                                                                Compute Equal regA regC regA,
+                                                                Branch regA (Rel 2),
+                                                                Jump (Rel (negate 5))
+                                                             ]
+
+                  prepped = (mainWithWait ++ waitForBarrier1 ++ waitForBarrier2)
+                  waitForBarrier1 = [[ TestAndSet (DirAddr commAddr1), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
+                  waitForBarrier2 = [[ TestAndSet (DirAddr commAddr2), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
+
+                  first = appendToList (compileListStat s1 lut arp newShared prepped t1) t1 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr1) ]
+
+                  second = appendToList (compileListStat s2 lut arp newShared first t2) t2 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr2) ]
+
+                  (commAddr1, commAddr2) = getCommAddr newShared t1
 
 
 compileStat s@(SmtLock id) lut arp shared instr threadNo =
@@ -263,7 +285,10 @@ compileExpr arp (ExprVar id) lut shared instr threadNo =
                                 Receive regA,
                                 Compute Equal regA regSprID regA,
                                 Branch regA (Rel 2),
-                                Jump (Rel (negate 8))
+                                Jump (Rel (negate 8)),
+                                ReadInstr (DirAddr addr),
+                                Receive regA,
+                                Push regA
                               ]
               addr = getSharedAddr id shared
               lockAddr = addr + 1
@@ -391,8 +416,8 @@ getPathToAR id lut =
 getChangeInN :: String -> [[(String, Integer, Statement, Integer)]] -> Integer -> Int
 getChangeInN id ([]:xss) n = getChangeInN id (xss) n
 getChangeInN id (((a,b,c,d):xs):xss) currentN
-    | a == id = 0
     | d /= currentN = 1 + (getChangeInN id (((a,b,c,d):xs):xss) d)
+    | a == id = 0
     | otherwise = getChangeInN id (xs:xss) currentN
 
 
@@ -401,7 +426,8 @@ appendToList (xs:xss) 0 list = (xs ++ list) : xss
 appendToList s@(xs:xss) n list = xs : (appendToList xss (n-1) list)
 
 
-getCommAddr shared threadNo = ((length shared) * spaceInSharedMemForVar) + (1 * threadNo)
+getCommAddr shared threadNo = (res, res + 1)
+            where res = ((length shared) * spaceInSharedMemForVar) + threadNo
 
 ------------- TESTING
 

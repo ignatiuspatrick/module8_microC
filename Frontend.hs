@@ -200,7 +200,9 @@ checkExpr (ExprVar id) scopes exprType =
 
 ----------------- HELPERS
 
-checkForkParams exprs scopes = and( map isExprVar exprs) && and (map (\(ExprVar id) -> getDefinition id scopes /= Left defNotFound) exprs)
+checkForkParams exprs scopes =
+        and (map isExprVar exprs) &&
+        and (map (\(ExprVar id) -> getDefinition id scopes /= Left defNotFound) exprs)
 
 getIdsFromVars [] = []
 getIdsFromVars ((ExprVar id):xs) = id : (getIdsFromVars xs)
