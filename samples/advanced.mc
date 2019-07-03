@@ -1,25 +1,18 @@
-int x = 1;
+int x = 0;
 int y = 10;
 boolean z = false;
 
-function int doStuff() {
-    boolean a = true;
-
-    if (a == true) {
-        int z = 1;
-    }
-
-    int c = 0;
-
-    while (z == false) {
-        c = c + 4;
-        if (c >= 10) {
-            z = true;
+function int doStuff(int b, int d, boolean n) {
+    b = 44;
+    while (n == false) {
+        d = d + 3;
+        if (d >= 20) {
+            n = true;
         }
     }
-    return c;
+    return d;
 }
 
 if (z == false) {
-    int c = doStuff();
+    int c = doStuff(x, y, z);
 }
