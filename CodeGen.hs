@@ -125,7 +125,7 @@ compileStat s@(SmtCall id exprs) lut arp shared instr threadNo =
 
 
 compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
-        trace("newshared " ++ (show newShared)) $ appendToList second threadNo (moveFromSharedToLocal exprs lut arp newShared)
+        appendToList second threadNo (moveFromSharedToLocal exprs lut arp newShared)
             where newShared = movetToShared s lut arp shared t1
                   t1 = length instr
                   t2 = (length instr) + 1
@@ -152,9 +152,9 @@ compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
                   waitForBarrier1 = [[ Load (ImmValue 1) regA, WriteInstr regA (DirAddr commAddr1), TestAndSet (DirAddr commAddr1), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
                   waitForBarrier2 = [[ Load (ImmValue 1) regA, WriteInstr regA (DirAddr commAddr2), TestAndSet (DirAddr commAddr2), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
 
-                  first = trace("commAddr1 " ++ (show commAddr1)) $ appendToList (compileListStat s1 lut arp newShared prepped t1) t1 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr1) ]
+                  first = appendToList (compileListStat s1 lut arp newShared prepped t1) t1 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr1) ]
 
-                  second = trace("commAddr2 " ++ (show commAddr2)) $ appendToList (compileListStat s2 lut arp newShared first t2) t2 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr2) ]
+                  second = appendToList (compileListStat s2 lut arp newShared first t2) t2 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr2) ]
 
                   (commAddr1, commAddr2) = getCommAddr newShared t1
 

@@ -22,7 +22,7 @@ compileToFile path = do
                        str <- getHaskellContents path
                        template <- readFile "output/template"
                        writeFile outputPath (template ++ " " ++  str)
-                       (_, Just bla, _, comp) <- createProcess (proc "ghc" [outputPath]) {std_out = CreatePipe}
+                       (_, Just bla, _, comp) <- createProcess (proc "ghc" [outputPath]) {std_out = CreatePipe, std_err = CreatePipe}
                        waitForProcess comp
                        callCommand ("chmod u+x " ++ compiledFile)
                        callCommand ("rm " ++ compiledFile ++ ".o")
@@ -56,5 +56,5 @@ testFromFile path = do
 
 
 testSuite samples = do
-                        res <- (\x -> elem False x) <$> (map testFromFile samples)
-                        return (True == res)
+                        booleans <- mapM testFromFile samples
+                        return (and booleans)
