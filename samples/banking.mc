@@ -4,38 +4,37 @@ currentMoney = 100;
 
 fork (currentMoney) {
     int i = 0;
+    lock currentMoney;
     while (i < 2) {
-        lock currentMoney;
         currentMoney = currentMoney + 100;
-        unlock currentMoney;
         i = i + 1;
     }
+    unlock currentMoney;
 
     fork (currentMoney) {
         int i = 0;
+        lock currentMoney;
         while (i < 2) {
-            lock currentMoney;
             currentMoney = currentMoney + 100;
-            unlock currentMoney;
             i = i + 1;
         }
-    } {
-        int i = 0;
+        i = 0;
         while (i < 2) {
-            lock currentMoney;
             currentMoney = currentMoney - 100;
-            unlock currentMoney;
             i = i + 1;
         }
+        unlock currentMoney;
+    } {
+
     }
 } {
     int i = 0;
+    lock currentMoney;
     while (i < 2) {
-        lock currentMoney;
         currentMoney = currentMoney - 100;
-        unlock currentMoney;
         i = i + 1;
     }
+    unlock currentMoney;
 }
 
 currentMoney = currentMoney;

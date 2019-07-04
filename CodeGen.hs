@@ -91,15 +91,14 @@ compileStat s@(SmtAss id e) lut arp shared instr threadNo =
                                              ])
                   getFromShared = [
                                     Pop regC,
-                                    ReadInstr (DirAddr lockAddr),
-                                    Receive regA,
-                                    Branch regA (Rel 2),
-                                    Jump (Rel 6),
                                     ReadInstr (DirAddr ownerAddr),
                                     Receive regA,
-                                    Compute Equal regA regSprID regA,
-                                    Branch regA (Rel 2),
-                                    Jump (Rel (negate 8)),
+                                    Compute Equal regA regSprID regB,
+                                    Branch regB (Rel 5),
+                                    Load (ImmValue (negate 1)) regD,
+                                    Compute Equal regA regD regB,
+                                    Branch  regB (Rel 2),
+                                    Jump (Rel (negate 7)),
                                     WriteInstr regC (DirAddr addr)
                                   ]
                   addr = getSharedAddr id shared
@@ -126,11 +125,12 @@ compileStat s@(SmtCall id exprs) lut arp shared instr threadNo =
 
 
 compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
-        appendToList second threadNo (moveFromSharedToLocal exprs lut arp newShared)
+        trace("newshared " ++ (show newShared)) $ appendToList second threadNo (moveFromSharedToLocal exprs lut arp newShared)
             where newShared = movetToShared s lut arp shared t1
                   t1 = length instr
                   t2 = (length instr) + 1
-                  moved = trace("shared " ++ (show newShared)) $ appendToList instr threadNo (moveToSharedMemory exprs lut arp newShared)
+                  filtered = [x | x@(ExprVar id) <- exprs, not (inShared id shared)]
+                  moved = appendToList instr threadNo (moveToSharedMemory filtered lut arp newShared)
                   mainWithRelease = appendToList moved threadNo [WriteInstr reg0 (DirAddr commAddr1), WriteInstr reg0 (DirAddr commAddr2)]
                   mainWithWait = appendToList mainWithRelease threadNo [
                                                                 ReadInstr (DirAddr commAddr1),
@@ -149,12 +149,12 @@ compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
                                                              ]
 
                   prepped = (mainWithWait ++ waitForBarrier1 ++ waitForBarrier2)
-                  waitForBarrier1 = [[ TestAndSet (DirAddr commAddr1), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
-                  waitForBarrier2 = [[ TestAndSet (DirAddr commAddr2), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
+                  waitForBarrier1 = [[ Load (ImmValue 1) regA, WriteInstr regA (DirAddr commAddr1), TestAndSet (DirAddr commAddr1), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
+                  waitForBarrier2 = [[ Load (ImmValue 1) regA, WriteInstr regA (DirAddr commAddr2), TestAndSet (DirAddr commAddr2), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
 
-                  first = appendToList (compileListStat s1 lut arp newShared prepped t1) t1 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr1) ]
+                  first = trace("commAddr1 " ++ (show commAddr1)) $ appendToList (compileListStat s1 lut arp newShared prepped t1) t1 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr1) ]
 
-                  second = appendToList (compileListStat s2 lut arp newShared first t2) t2 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr2) ]
+                  second = trace("commAddr2 " ++ (show commAddr2)) $ appendToList (compileListStat s2 lut arp newShared first t2) t2 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr2) ]
 
                   (commAddr1, commAddr2) = getCommAddr newShared t1
 
@@ -175,9 +175,9 @@ compileStat s@(SmtLock id) lut arp shared instr threadNo =
 compileStat s@(SmtUnlock id) lut arp shared instr threadNo =
         appendToList instr threadNo
         [
-            WriteInstr reg0 (DirAddr lockAddr),
             Load (ImmValue (negate 1)) regA,
-            WriteInstr regA (DirAddr ownerAddr)
+            WriteInstr regA (DirAddr ownerAddr),
+            WriteInstr reg0 (DirAddr lockAddr)
         ]
             where addr = findInShared id shared
                   lockAddr = addr + 1
@@ -216,7 +216,8 @@ getVarToMem id lut shared =
             , Load (IndAddr regE) regA
             , WriteInstr regA (DirAddr addr)
             , WriteInstr reg0 (DirAddr (addr+1))
-            , WriteInstr reg0 (DirAddr (addr+2))
+            , Load (ImmValue (negate 1)) regB
+            , WriteInstr regB (DirAddr (addr+2))
         ])
         where addr = findInShared id shared
               offset = (fromIntegral (getOffsetById id (reverse lut)))
@@ -277,15 +278,14 @@ compileExpr arp (ExprVar id) lut shared instr threadNo =
                                        , Push regA
                                    ])
               getFromShared = [
-                                ReadInstr (DirAddr lockAddr),
-                                Receive regA,
-                                Branch regA (Rel 2),
-                                Jump (Rel 6),
                                 ReadInstr (DirAddr ownerAddr),
                                 Receive regA,
-                                Compute Equal regA regSprID regA,
-                                Branch regA (Rel 2),
-                                Jump (Rel (negate 8)),
+                                Compute Equal regA regSprID regB,
+                                Branch regB (Rel 5),
+                                Load (ImmValue (negate 1)) regD,
+                                Compute Equal regA regD regB,
+                                Branch  regB (Rel 2),
+                                Jump (Rel (negate 7)),
                                 ReadInstr (DirAddr addr),
                                 Receive regA,
                                 Push regA
