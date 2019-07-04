@@ -8,6 +8,7 @@ import Data.List.Split
 import Control.Monad
 import Debug.Trace
 import System.Process
+import System.IO
 
 main = print("Main!")
 
@@ -20,13 +21,16 @@ compile path = (\x -> compileProg x [[]] 0 []) <$> (initFile path)
 compileToFile path = do
                        str <- getHaskellContents path
                        template <- readFile "output/template"
-                       x <- writeFile outputPath (template ++ " " ++  str)
-                       y <- callProcess "ghc" ["-w", outputPath]
-                       z <- callCommand ("chmod u+x " ++ compiledFile)
-                       a <- callCommand ("rm " ++ compiledFile ++ ".o")
-                       b <- callCommand ("rm " ++ compiledFile ++ ".hi")
-                       c <- callCommand ("rm " ++ compiledFile ++ ".hs")
-                       callCommand compiledFile
+                       writeFile outputPath (template ++ " " ++  str)
+                       (_, Just bla, _, comp) <- createProcess (proc "ghc" [outputPath]) {std_out = CreatePipe}
+                       waitForProcess comp
+                       callCommand ("chmod u+x " ++ compiledFile)
+                       callCommand ("rm " ++ compiledFile ++ ".o")
+                       callCommand ("rm " ++ compiledFile ++ ".hi")
+                       callCommand ("rm " ++ compiledFile ++ ".hs")
+                       (_, Just stdout, _, cp) <- createProcess (proc compiledFile []) {std_out = CreatePipe}
+                       waitForProcess cp
+                       hGetContents stdout
                             where outputPath = compiledFile ++ ".hs"
                                   file = ((splitOn "/" path)!!1)
                                   filename = ((splitOn "." file)!!0)
@@ -36,3 +40,8 @@ getHaskellContents path = do
                             return $ show instr
 
 runDebug = runWithDebugger (debuggerSimplePrintAndWait myShow)
+
+
+testFromFile path = do
+                        output <- compileToFile path
+                        return output
