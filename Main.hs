@@ -44,4 +44,17 @@ runDebug = runWithDebugger (debuggerSimplePrintAndWait myShow)
 
 testFromFile path = do
                         output <- compileToFile path
-                        return output
+                        parsed <- initFile path
+                        expectedParse <- readFile pathParsed
+                        expectedStdout <- readFile pathStdout
+                        return (output == expectedStdout)
+                        where parsed = "-parsed"
+                              stdOut = "-stdout"
+                              testDir = "tests/"
+                              pathParsed = (testDir ++ (splitOn "/" ((((splitOn "." path)!!0)) ++ parsed) !! 1))
+                              pathStdout = (testDir ++ (splitOn "/" ((((splitOn "." path)!!0)) ++ stdOut) !! 1))
+
+
+testSuite samples = do
+                        res <- (\x -> elem False x) <$> (map testFromFile samples)
+                        return (True == res)
