@@ -41,6 +41,8 @@ getHaskellContents path = do
 
 runDebug = runWithDebugger (debuggerSimplePrintAndWait myShow)
 
+samples = ["samples/advanced.mc", "samples/banking.mc", "samples/basic.mc", "samples/fibonacci.mc", "samples/peterson.mc", "samples/test.mc", "samples/threaded-advanced.mc", "samples/threaded-basic.mc"]
+
 writeToFile path = do
                             ins <- compileToFile path
                             program <- initFile path
