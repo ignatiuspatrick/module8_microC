@@ -36,8 +36,9 @@ add dummy def so threaded local stuff doesn't overwrite
  
 ### Heap management
 
-Finding space on the heap to allocate to the process but no deallocation
-or garbage collection. 
+Finding space on the heap to allocate to the process but no dealloc
+or garbage collection. We do have a heap management specifically for function.
+The heap is using offset as ARP that points to the parent scope
 
 ### Expressions and variables
  - typed variables

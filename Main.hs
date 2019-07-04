@@ -22,7 +22,7 @@ compileToFile path = do
                        str <- getHaskellContents path
                        template <- readFile "output/template"
                        writeFile outputPath (template ++ " " ++  str)
-                       (_, Just bla, _, comp) <- createProcess (proc "ghc" [outputPath]) {std_out = CreatePipe, std_err = CreatePipe}
+                       (_, Just bla, _, comp) <- createProcess (proc "ghc" [outputPath]) {std_out = CreatePipe}
                        waitForProcess comp
                        callCommand ("chmod u+x " ++ compiledFile)
                        callCommand ("rm " ++ compiledFile ++ ".o")
@@ -40,6 +40,17 @@ getHaskellContents path = do
                             return $ show instr
 
 runDebug = runWithDebugger (debuggerSimplePrintAndWait myShow)
+
+writeToFile path = do
+                            ins <- compileToFile path
+                            program <- initFile path
+                            writeFile pathParsed (show program)
+                            writeFile pathStdout (show ins)
+                            where parsed = "-parsed"
+                                  stdOut = "-stdout"
+                                  testDir = "tests/"
+                                  pathParsed = (testDir ++ (splitOn "/" ((((splitOn "." path)!!0)) ++ parsed) !! 1))
+                                  pathStdout = (testDir ++ (splitOn "/" ((((splitOn "." path)!!0)) ++ stdOut) !! 1))
 
 
 testFromFile path = do
