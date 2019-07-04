@@ -84,11 +84,12 @@ parseBinary = BinaryAnd <$> reserved "&&"
 ----------------- TYPE CHECKING
 
 
-initProg :: Program -> [[(String, Statement)]] -> [[(String, Statement)]]
+initProg :: Program -> [[(String, Statement)]] -> Either String [[(String, Statement)]]
 initProg (Program ([])) scopes = scopes
-initProg (Program (x:xs)) scopes = initProg (Program xs) (initStatement x scopes)
+initProg (Program (x:xs)) scopes = if (isLeft new) then Left "idk" else initProg (Program xs) (fromRight new [])
+    where new = (initStatement x scopes)
 
-initStatement :: Statement -> [[(String, Statement)]] -> [[(String, Statement)]]
+initStatement :: Statement -> [[(String, Statement)]] -> Either String [[(String, Statement)]]
 initStatement stm@(SmtDef (VariableDef a id expr)) scopes =
                 if def == Left defNotFound
                 then (if checkExpr expr scopes (strFromType a)
@@ -273,8 +274,9 @@ defNotFound = "Definition not found!"
 
 ----------------- TEST
 
-testFront p = if length (testInit (par)) >= 0 then parsed else error ("Type checking failed!")
+testFront p = if isLeft res then par else Left "error"
         where par@(Right parsed) = testParser p
+              res = testInit (par)
 
 testInit (Right p) = initProg p [[]]
 

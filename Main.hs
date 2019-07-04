@@ -16,7 +16,9 @@ main = print("Main!")
 
 
 parseFile path = testParser <$> readFile path
-initFile path = testFront <$> readFile path
+initFile path = do
+                    str <- testFront <$> (readFile path)
+                    return str
 
 compile path = (\x -> compileProg x [[]] 0 []) <$> (initFile path)
 
@@ -24,7 +26,7 @@ compileToFile path = do
                        str <- getHaskellContents path
                        template <- readFile "output/template"
                        writeFile outputPath (template ++ " " ++  str)
-                       (_, Just bla, _, comp) <- createProcess (proc "ghc" [outputPath]) {std_out = CreatePipe}
+                       (_, Just bla, _, comp) <- createProcess (proc "ghc" [outputPath]) {std_out = CreatePipe, std_err = CreatePipe}
                        waitForProcess comp
                        callCommand ("chmod u+x " ++ compiledFile)
                        callCommand ("rm " ++ compiledFile ++ ".o")
@@ -63,10 +65,10 @@ errFunc e = do
 
 testFromFile path = do
                         output <- compileToFile path
-                        parsed <- catch (initFile path) errFunc
+                        par <- fromRight (show (testFront <$> (readFile path))) "error"
                         expectedParse <- readFile pathParsed
                         expectedStdout <- readFile pathStdout
-                        return ((show parsed) == expectedParse)
+                        return (output == expectedStdout)
                         where parsed = "-parsed"
                               stdOut = "-stdout"
                               testDir = "tests/"
