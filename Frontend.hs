@@ -3,12 +3,17 @@ module Frontend where
 import Data.List
 import Data.Char
 
-import Text.ParserCombinators.Parsec
+import Text.ParserCombinators.Parsec as Parsec
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Debug.Trace
 import Grammar
+import Control.Exception
 
+
+data ParseException = ParseException String
+                        deriving Show
+instance Exception ParseException
 
 -- Programs
 parseProgram = Program <$> (many parseStatement)
@@ -30,8 +35,8 @@ parseStatement =
               <|> SmtFork <$> (reserved "fork" *> (parens (commaSep parseExpression))) <*> (braces (many parseStatement)) <*> (braces (many parseStatement))
               <|> SmtLock <$> (reserved "lock" *> identifier <* semi)
               <|> SmtUnlock <$> (reserved "unlock" *> identifier <* semi)
-              <|> try (SmtDef <$> parseDefinition)
-              <|> try (SmtAss <$> (identifier <* symbol "=") <*> parseExpression <* semi)
+              <|> Parsec.try (SmtDef <$> parseDefinition)
+              <|> Parsec.try (SmtAss <$> (identifier <* symbol "=") <*> parseExpression <* semi)
               <|> SmtCall <$> identifier <*> (parens (commaSep parseExpression)) <* semi
 
 
@@ -45,10 +50,10 @@ sub' = (\_ -> (ExprSubtract)) <$> reserved "-"
 mult' = (\_ -> (ExprMult)) <$> reserved "*"
 
 parseExpression =
-                (try (ExprBin <$> parseBoolean <*> parseBinary <*> parseExpression))
+                (Parsec.try (ExprBin <$> parseBoolean <*> parseBinary <*> parseExpression))
                 <|> parseBoolean
 
-parseBoolean = try (ExprBool <$> parseArithmetic1 <*> parseOrder <*> parseBoolean)
+parseBoolean = Parsec.try (ExprBool <$> parseArithmetic1 <*> parseOrder <*> parseBoolean)
             <|> parseArithmetic1
 
 parseArithmetic1 = (parseArithmetic2 `chainr1` add')
@@ -60,7 +65,7 @@ parseFact =
             (ExprConst <$> integer)
             <|> (ExprTrue <$> reserved "true")
             <|> (ExprFalse <$> reserved "false")
-            <|> try (ExprCall <$> identifier <*> (parens (commaSep parseExpression)))
+            <|> Parsec.try (ExprCall <$> identifier <*> (parens (commaSep parseExpression)))
             <|> (ExprVar <$> identifier)
             <|> (ExprBrac <$> (parens parseExpression))
 
@@ -88,7 +93,7 @@ initStatement stm@(SmtDef (VariableDef a id expr)) scopes =
                 if def == Left defNotFound
                 then (if checkExpr expr scopes (strFromType a)
                     then (init scopes) ++ [((last scopes) ++ [(id, stm)])]
-                    else error("Type error in variable definition! The definition of '" ++ id ++ "' is invalid."))
+                    else throw (ParseException ("Type error in variable definition! The definition of '" ++ id ++ "' is invalid.")))
                 else error ("Type error in variable definition! The identifier '" ++ id ++ "' has already been used.")
                 where def = getTopLevelDefinition id scopes
 

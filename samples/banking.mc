@@ -1,6 +1,4 @@
-int currentMoney = 0;
-
-currentMoney = 100;
+int currentMoney = true;
 
 fork (currentMoney) {
     int i = 0;

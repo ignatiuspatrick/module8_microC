@@ -1,6 +1,7 @@
 module Main where
 
 import Frontend
+import Grammar
 import CodeGen
 import Text.ParserCombinators.Parsec
 import Sprockell
@@ -9,6 +10,7 @@ import Control.Monad
 import Debug.Trace
 import System.Process
 import System.IO
+import Control.Exception
 
 main = print("Main!")
 
@@ -54,13 +56,16 @@ writeToFile path = do
                                   pathParsed = (testDir ++ (splitOn "/" ((((splitOn "." path)!!0)) ++ parsed) !! 1))
                                   pathStdout = (testDir ++ (splitOn "/" ((((splitOn "." path)!!0)) ++ stdOut) !! 1))
 
+errFunc e = do
+                let err = show (e :: SomeException)
+                return (Program [])
 
 testFromFile path = do
                         output <- compileToFile path
-                        parsed <- initFile path
+                        parsed <- catch (initFile path) errFunc
                         expectedParse <- readFile pathParsed
                         expectedStdout <- readFile pathStdout
-                        return (output == expectedStdout)
+                        return ((show parsed) == expectedParse)
                         where parsed = "-parsed"
                               stdOut = "-stdout"
                               testDir = "tests/"
