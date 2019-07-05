@@ -16,10 +16,6 @@ cd ..
 ghci Main.hs
 ```
 
-Then inside Main.hs uncomment the lines as indicated on line 40,
-depending on your architecture. This is needed on Unix systems
-(as the file needs execution permissions) but the rest is just to 
-have less clutter in `output/`. 
 
 Then a couple of functions are at your disposal to use the language.
 `compileToFile <insert path to .mc file>` - this lets you automatically compile the file to an executable and run it.
