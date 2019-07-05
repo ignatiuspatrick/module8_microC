@@ -79,5 +79,5 @@ testFromFile (path, fail) = do
 
 
 testSuite = do
-                        booleans <- mapM testFromFile samplesWithExp
-                        return (and booleans)
+                booleans <- mapM testFromFile samplesWithExp
+                return (and booleans)

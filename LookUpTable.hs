@@ -15,6 +15,7 @@ type Entry = (ID, Offset, Statement, FunctionIndexInLUT)
 type LookUpScope = [Entry]
 type LookUpTable = [LookUpScope]
 
+-- update the lookup table with the new entry
 generateLutSt :: Statement -> LookUpTable -> LookUpTable
 generateLutSt s@(SmtDef (VariableDef _ a e)) lut = newlut
             where n = (getFuncIndex (reverse lut))
@@ -38,9 +39,7 @@ generateLutSt s@(SmtFork _ _ _) lut = lut ++ [[]]
 
 generateLutSt _ lut = lut
 
-
-fixUpLut (ExprCall s _) lut = (init lut)
-
+-- prepare look up table for going into a new scope of the function call
 generateLutEx (ExprCall s exprs) lut = lut ++ [defs]
             where n =  toInteger (length lut)
                   dummy = [("#", 0, SmtDef (FunctionDef (IntType ()) "#" [(Param (IntType()) "&")] []),  n)]
@@ -50,24 +49,29 @@ generateLutEx (ExprCall s exprs) lut = lut ++ [defs]
 
 generateLutEx _ lut = lut
 
+-- put the parameters of the function into the lookup able
 generateDefsForParams :: [Expression] -> [Param] -> LookUpTable -> Integer -> LookUpScope
 generateDefsForParams [] [] lut n = []
 generateDefsForParams (e:exprs) p@((Param a id):params) lut n = (id, offset, (SmtDef (VariableDef a id e)), n) : generateDefsForParams exprs params lut n
         where offset = toInteger (negate (2 + (length p)))
 
 
-
+-- get the FunctionIndexInLUT which lets you know where to find the beginning of all the definition in the current AR
 getFuncIndex ([]:[]) = 0
 getFuncIndex ([]:xss) = getFuncIndex xss
 getFuncIndex (((_,_,_,n):xs):xss) = n
+
+
+-- calculate the size of the local data field in the current AR
+calcLocalDataSize n lut = helpCalcLocalData b
+            where (_,b) = splitAt (fromIntegral n) lut
 
 helpCalcLocalData [] = 0
 helpCalcLocalData ([]:xss) = helpCalcLocalData xss
 helpCalcLocalData (((_,_,(SmtDef (VariableDef _ _ _)),_):xs):xss) = 1 + helpCalcLocalData (xs:xss)
 helpCalcLocalData (((_,_,_,_):xs):xss) = 0 + helpCalcLocalData (xs:xss)
 
-calcLocalDataSize n lut = helpCalcLocalData b
-            where (_,b) = splitAt (fromIntegral n) lut
+
 
 getStatementFromLut :: Int -> String -> LookUpTable -> Statement
 getStatementFromLut n id lut = helperGetStatement newlut id

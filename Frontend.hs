@@ -90,6 +90,22 @@ initProg (Program (x:xs)) (Right scopes) = initProg (Program xs) new
     where new = (initStatement x (Right scopes))
 initProg (Program (x:xs)) (Left err) = (Left err)
 
+
+
+-- Open scope and put in the first of the statements into it
+initScope :: [Statement] -> Either String NestedScopes -> Either String NestedScopes
+initScope _ (Left err) = Left err
+initScope [] (Right scopes) = Right (init scopes)
+initScope statements (Right scopes) = if isLeft folded then folded else Right (init (fromRight [[]] folded))
+                       where folded = initializeStatements statements (Right scopes)
+
+initializeStatements :: [Statement] -> Either String NestedScopes -> Either String NestedScopes
+initializeStatements [] (Right scopes) = (Right scopes)
+initializeStatements (s:statements) (Right scopes) = initializeStatements statements (initStatement s (Right scopes))
+initializeStatements (s:statements) (Left err) = Left err
+
+
+
 initStatement :: Statement -> Either String NestedScopes -> Either String NestedScopes
 initStatement stm@(SmtDef (VariableDef a id expr)) (Right scopes) =
                 if def == Left defNotFound
@@ -226,6 +242,7 @@ getIdsFromVars ((ExprVar id):xs) = id : (getIdsFromVars xs)
 isExprVar (ExprVar id) = True
 isExprVar _ = False
 
+-- make sure only variables declared into shared memory are locked within the block
 checkForkLocks ids [] = True
 checkForkLocks ids ((SmtLock id):statements) = (id `elem` ids) && checkForkLocks ids statements
 checkForkLocks ids ((SmtUnlock id):statements) = (id `elem` ids) && checkForkLocks ids statements
@@ -254,20 +271,6 @@ getTopLevelDefinition id [] = Left defNotFound
 getTopLevelDefinition id [x] = maybeToRight defNotFound (find (\(a, b) -> a == id) x)
 getTopLevelDefinition id scopes = maybeToRight defNotFound found
         where found = (find (\(a, b) -> a == id) (last scopes))
-
-
--- Open scope and put in the first of the statements into it
-initScope :: [Statement] -> Either String NestedScopes -> Either String NestedScopes
-initScope _ (Left err) = Left err
-initScope [] (Right scopes) = Right (init scopes)
-initScope statements (Right scopes) = if isLeft folded then folded else Right (init (fromRight [[]] folded))
-                       where folded = initializeStatements statements (Right scopes)
-
-initializeStatements :: [Statement] -> Either String NestedScopes -> Either String NestedScopes
-initializeStatements [] (Right scopes) = (Right scopes)
-initializeStatements (s:statements) (Right scopes) = initializeStatements statements (initStatement s (Right scopes))
-initializeStatements (s:statements) (Left err) = Left err
-
 
 getTypeFromDef (Right (SmtDef (VariableDef t id _))) = t
 getTypeFromDef (Right (SmtDef (FunctionDef t id _ _))) = t
@@ -300,14 +303,3 @@ testFront p = if isLeft res then (Left (fromLeft "" res)) else (Right parsed)
 testInit p = initProg p (Right [[]])
 
 testParser p = parse parseProgram [] p
-
-p1 = "int a = 1; function int x() { int z = 1; } int y = 0;"
-p2 = "int a = 1; function int a() { int z = 1; } int y = 0;"
-p3 = "int a = 1; int b = 1+1; int c = 2; function int x() { boolean a = 1; }"
-p4 = "boolean x = true; if (x == true) {int x = 3;}"
-p5 = "boolean x = true; if (x == 1) {int x = 3;} else {}"
-p6 = "boolean x = true; if (x == true) {int x = 3; while (x > 0) { x = x - 1; }}"
-p7 = "int a = 1; int b = 1+1; function boolean x() { boolean a = true; return a; } int c = x();"
-p8 = "int a = 1; int b = 1+1; function boolean x() { boolean a = true; return a; } boolean c = x();"
-p9 = "int a = 1; int b = 1+1; function int x(int b) { int z = 1; } int c = x(5);"
-p10 = "int a = 1; int b = 1+1; function int x(int b) { int z = 1; return z + b;} int c = x(5);"

@@ -12,7 +12,9 @@ import Debug.Trace
 compileProg :: Program -> LookUpTable -> Int -> [(String, Int)] -> [[Instruction]]
 compileProg (Program ss) lut arp shared =
             map (++ [ WriteInstr regA numberIO , EndProg ]) res
-                where res = (compileListStat ss lut arp shared [[ Load (ImmValue (fromIntegral arp)) regF ]] 0)
+                where res = (compileListStat ss lut arp shared [
+                                    [ Load (ImmValue (fromIntegral arp)) regF ] -- put current arp into regF
+                                    ] 0)
 
 
 
@@ -40,7 +42,7 @@ compileStat s@(SmtDef (VariableDef _ _ e)) lut arp shared instr threadNo = appen
                   memad = fromIntegral ((fromIntegral arp) + offset) -- points to the caller's arp
                   (_,offset,_,_) = (last (last lut))
 
-compileStat s@(SmtDef (FunctionDef _ _ _ _)) lut arp shared instr threadNo = instr
+compileStat s@(SmtDef (FunctionDef _ _ _ _)) lut arp shared instr threadNo = instr -- function def doesn't generate code
 compileStat s@(SmtIf e strue sfalse) lut arp shared instr threadNo = instrue
             where newlut = (generateLutSt s lut) -- evaluate later on
                   iE = (compileExpr arp e lut shared instr threadNo)
@@ -72,29 +74,29 @@ compileStat s@(SmtRet e) lut arp shared instr threadNo = appendToList (compileEx
             [
                 Pop regA
                 , Store regA (DirAddr addr)
-            ] where addr = (fromIntegral arp - 2)
+            ] where addr = (fromIntegral arp - 2) -- return value field is 2 below the arp
 
 compileStat s@(SmtAss id e) lut arp shared instr threadNo =
             appendToList (compileExpr arp e newlut shared instr threadNo) threadNo
                 (if inShared id shared then getFromShared else getFromLocal)
             where newlut = generateLutEx e lut
                   offset = fromIntegral (getOffsetById id (reverse newlut))
-                  getFromLocal = (getPathToAR id lut ++
+                  getFromLocal = (getPathToAR id lut ++  -- the code that goes to parent AR until it finds the variable in local data
                                              [
                                                  Load (ImmValue offset) regC
-                                                 , Compute Add regC regE regE
+                                                 , Compute Add regC regE regE   -- add offset to arp
                                                  , Pop regA
                                                  , Store regA (IndAddr regE)
                                              ])
                   getFromShared = [
                                     Pop regC,
-                                    ReadInstr (DirAddr ownerAddr),
+                                    ReadInstr (DirAddr ownerAddr),      -- check the owner of the lock
                                     Receive regA,
-                                    Compute Equal regA regSprID regB,
+                                    Compute Equal regA regSprID regB,   -- if current thread go ahead
                                     Branch regB (Rel 5),
                                     Load (ImmValue (negate 1)) regD,
                                     Compute Equal regA regD regB,
-                                    Branch  regB (Rel 2),
+                                    Branch  regB (Rel 2),               -- if -1 it's not locked, go ahead
                                     Jump (Rel (negate 7)),
                                     WriteInstr regC (DirAddr addr)
                                   ]
@@ -130,14 +132,14 @@ compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
                   moved = appendToList instr threadNo (moveToSharedMemory filtered lut arp newShared)
                   mainWithRelease = appendToList moved threadNo [WriteInstr reg0 (DirAddr commAddr1), WriteInstr reg0 (DirAddr commAddr2)]
                   mainWithWait = appendToList mainWithRelease threadNo [
-                                                                ReadInstr (DirAddr commAddr1),
+                                                                ReadInstr (DirAddr commAddr1),  -- wait for t1 to terminate
                                                                 Receive regA,
                                                                 Load (ImmValue (negate 1)) regC,
                                                                 Compute Equal regA regC regA,
                                                                 Branch regA (Rel 2),
                                                                 Jump (Rel (negate 5)),
 
-                                                                ReadInstr (DirAddr commAddr2),
+                                                                ReadInstr (DirAddr commAddr2),  -- wait for t2 to terminate
                                                                 Receive regA,
                                                                 Load (ImmValue (negate 1)) regC,
                                                                 Compute Equal regA regC regA,
@@ -146,10 +148,19 @@ compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
                                                              ]
 
                   prepped = (mainWithWait ++ waitForBarrier1 ++ waitForBarrier2)
-                  waitForBarrier1 = [[ Load (ImmValue 1) regA, WriteInstr regA (DirAddr commAddr1), TestAndSet (DirAddr commAddr1), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
+                  waitForBarrier1 = [[
+                    Load (ImmValue 1) regA,
+                    WriteInstr regA (DirAddr commAddr1), -- at first make sure to wait for release
+                    TestAndSet (DirAddr commAddr1),
+                    Receive regA,
+                    Branch regA (Rel 2),                 -- if changed, start execution
+                    Jump (Rel (negate 3))
+                    ]]
                   waitForBarrier2 = [[ Load (ImmValue 1) regA, WriteInstr regA (DirAddr commAddr2), TestAndSet (DirAddr commAddr2), Receive regA, Branch regA (Rel 2), Jump (Rel (negate 3)) ]]
 
-                  first = appendToList (compileListStat s1 lut arp newShared prepped t1) t1 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr1) ]
+                  first = appendToList (compileListStat s1 lut arp newShared prepped t1) t1 [
+                    Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr1) -- indicate termination
+                    ]
 
                   second = appendToList (compileListStat s2 lut arp newShared first t2) t2 [ Load (ImmValue (negate 1)) regC, WriteInstr regC (DirAddr commAddr2) ]
 
@@ -159,11 +170,11 @@ compileStat s@(SmtFork exprs s1 s2) lut arp shared instr threadNo =
 compileStat s@(SmtLock id) lut arp shared instr threadNo =
         appendToList instr threadNo
         [
-            TestAndSet (DirAddr lockAddr)
+            TestAndSet (DirAddr lockAddr)       -- try to acquire lock
           , Receive regA
           , Branch regA (Rel 2)
           , Jump (Rel (negate 3))
-          , WriteInstr regSprID (DirAddr ownerAddr)
+          , WriteInstr regSprID (DirAddr ownerAddr) -- write your id to owner address
         ]
             where addr = findInShared id shared
                   lockAddr = addr + 1
@@ -173,8 +184,8 @@ compileStat s@(SmtUnlock id) lut arp shared instr threadNo =
         appendToList instr threadNo
         [
             Load (ImmValue (negate 1)) regA,
-            WriteInstr regA (DirAddr ownerAddr),
-            WriteInstr reg0 (DirAddr lockAddr)
+            WriteInstr regA (DirAddr ownerAddr),    -- undo the owner id write
+            WriteInstr reg0 (DirAddr lockAddr)      -- release lock
         ]
             where addr = findInShared id shared
                   lockAddr = addr + 1
@@ -196,10 +207,10 @@ getVarToLocal id lut shared =
         (getPathToAR id lut ++
         [
             Load (ImmValue offset) regC
-            , Compute Add regC regE regE
+            , Compute Add regC regE regE    -- get path to correct AR
             , ReadInstr (DirAddr addr)
             , Receive regA
-            , Store regA (IndAddr regE) -- store at calculated dir
+            , Store regA (IndAddr regE)     -- store at calculated dir
         ])
         where addr = findInShared id shared
               offset = (fromIntegral (getOffsetById id (reverse lut)))
@@ -209,12 +220,12 @@ getVarToMem id lut shared =
         (getPathToAR id lut ++
         [
             Load (ImmValue offset) regC
-            , Compute Add regC regE regE
+            , Compute Add regC regE regE            -- get variable from local data
             , Load (IndAddr regE) regA
             , WriteInstr regA (DirAddr addr)
-            , WriteInstr reg0 (DirAddr (addr+1))
+            , WriteInstr reg0 (DirAddr (addr+1))    -- initilize lock addr
             , Load (ImmValue (negate 1)) regB
-            , WriteInstr regB (DirAddr (addr+2))
+            , WriteInstr regB (DirAddr (addr+2))    -- initilize owner addr
         ])
         where addr = findInShared id shared
               offset = (fromIntegral (getOffsetById id (reverse lut)))
@@ -275,13 +286,13 @@ compileExpr arp (ExprVar id) lut shared instr threadNo =
                                        , Push regA
                                    ])
               getFromShared = [
-                                ReadInstr (DirAddr ownerAddr),
+                                ReadInstr (DirAddr ownerAddr),      -- check the owner of the lock
                                 Receive regA,
                                 Compute Equal regA regSprID regB,
-                                Branch regB (Rel 5),
+                                Branch regB (Rel 5),                -- if my id, continue
                                 Load (ImmValue (negate 1)) regD,
                                 Compute Equal regA regD regB,
-                                Branch  regB (Rel 2),
+                                Branch  regB (Rel 2),               -- if lock not taken, get value
                                 Jump (Rel (negate 7)),
                                 ReadInstr (DirAddr addr),
                                 Receive regA,
@@ -354,7 +365,7 @@ compileExpr arp (ExprBin a bin b) lut shared  instr threadNo =
 
 
 compileExpr arp e@(ExprCall id exprs) lut shared instr threadNo =
-        appendToList stats threadNo [ Load (DirAddr retVal) regA, Push regA , Load (ImmValue arp) regF ]
+        appendToList stats threadNo [ Load (DirAddr retVal) regA, Push regA , Load (ImmValue arp) regF ] -- call function and get return value
         where len = toInteger (length exprs)
               newlut = generateLutEx e lut
               n = getFuncIndex lut
@@ -377,6 +388,7 @@ inShared id [] = False
 inShared id ((s, _):shared) = if id == s then True else inShared id shared
 getSharedAddr id ((s, addr):shared) = if id == s then addr else getSharedAddr id shared
 
+-- load parameters into their field in new AR
 loadParam :: Integer -> Int -> [Instruction]
 loadParam 0 arp = []
 loadParam n arp =
@@ -403,13 +415,13 @@ getOffsetById id (((a,b,c,d):xs):xss)
     | a == id = b
     | otherwise = getOffsetById id (xs:xss)
 
-
+-- go to the parent function's AR as many times as needed till the AR's local data has the variable
 getPathToAR id lut =
                 [Compute Add regF reg0 regE] ++ -- get current arp into regE
                 (map (\x -> (Load (IndAddr regE) regE) ) (init [0..n])) -- go to parent's AR n times
             where n = getChangeInN id (reverse lut) (getFuncIndex (reverse lut))
 
-
+-- see how many times you need to go to the current's AR parent
 getChangeInN :: String -> LookUpTable -> Integer -> Int
 getChangeInN id [] n = 0
 getChangeInN id ([]:xss) n = getChangeInN id (xss) n
@@ -418,7 +430,7 @@ getChangeInN id (((a,b,c,d):xs):xss) currentN
     | a == id = 0
     | otherwise = getChangeInN id (xs:xss) currentN
 
-
+-- append instructions to the correct thread
 appendToList :: [[Instruction]] -> Int -> [Instruction] -> [[Instruction]]
 appendToList (xs:xss) 0 list = (xs ++ list) : xss
 appendToList s@(xs:xss) n list = xs : (appendToList xss (n-1) list)
