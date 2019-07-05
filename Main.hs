@@ -13,7 +13,6 @@ import System.Process
 import System.IO
 import Control.Exception
 
-
 main = print("Main!")
 
 
@@ -52,8 +51,9 @@ compileToFile path = do
 
 runDebug = runWithDebugger (debuggerSimplePrintAndWait myShow)
 
-samples = ["samples/advanced.mc", "samples/banking.mc", "samples/basic.mc", "samples/fibonacci.mc", "samples/peterson.mc", "samples/threaded-advanced.mc", "samples/threaded-basic.mc"]
-samplesWithExp = [("samples/advanced.mc", True), ("samples/banking.mc", True), ("samples/basic.mc", True), ("samples/fibonacci.mc", True), ("samples/peterson.mc", True), ("samples/threaded-advanced.mc", True), ("samples/threaded-basic.mc", True)]
+samplesWithExp = samplesWithExpTrue ++ samplesWithExpFalse
+samplesWithExpTrue = [("samples/advanced.mc", True), ("samples/banking.mc", True), ("samples/basic.mc", True), ("samples/fibonacci.mc", True), ("samples/peterson.mc", True), ("samples/threaded-advanced.mc", True), ("samples/threaded-basic.mc", True)]
+samplesWithExpFalse = [("samples/wrong.mc", False)]
 
 testFromFile (path, fail) = do
                         par <- (testFront <$> (readFile path))
