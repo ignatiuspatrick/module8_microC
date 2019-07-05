@@ -17,7 +17,7 @@ data ParseException = ParseException String
 instance Exception ParseException
 
 -- Programs
-parseProgram = Program <$> (many parseStatement)
+parseProgram = Program <$> (whiteSpace *> (many parseStatement))
 parseDefinition =
                (FunctionDef <$> (reserved "function" *> parseType) <*> identifier <*> parens (commaSep parseParam) <*> braces (many parseStatement))
                <|> (VariableDef <$> parseType <*> (identifier <* symbol "=") <*> (parseExpression <* semi))

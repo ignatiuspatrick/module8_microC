@@ -164,5 +164,6 @@ integer = Token.integer lexer
 reserved = Token.reserved lexer
 commaSep = Token.commaSep lexer
 semi = Token.semi lexer
+whiteSpace = Token.whiteSpace lexer
 
 
