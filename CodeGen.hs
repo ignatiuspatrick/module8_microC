@@ -7,12 +7,9 @@ import Grammar
 import Text.ParserCombinators.Parsec
 import Debug.Trace
 
-
--- Instruction generators
-
 ------------- COMPILE PROGRAM
 -- lut must be an empty array, program ss is a result of parsing, and arp is 0
-compileProg :: Program -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [[Instruction]]
+compileProg :: Program -> LookUpTable -> Int -> [(String, Int)] -> [[Instruction]]
 compileProg (Program ss) lut arp shared =
             map (++ [ WriteInstr regA numberIO , EndProg ]) res
                 where res = (compileListStat ss lut arp shared [[ Load (ImmValue (fromIntegral arp)) regF ]] 0)
@@ -20,7 +17,7 @@ compileProg (Program ss) lut arp shared =
 
 
 ------------- COMPILE LIST OF STATEMENTS
-compileListStat :: [Statement] -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
+compileListStat :: [Statement] -> LookUpTable -> Int -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
 compileListStat [] lut arp shared instr threadNo = instr
 compileListStat (s:ss) lut arp shared instr threadNo =
         (compileListStat ss newlut arp shared newInstr threadNo)
@@ -33,7 +30,7 @@ compileListStat (s:ss) lut arp shared instr threadNo =
 
 
 ------------- COMPILE STATEMENT
-compileStat :: Statement -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
+compileStat :: Statement -> LookUpTable -> Int -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
 compileStat s@(SmtDef (VariableDef _ _ e)) lut arp shared instr threadNo = appendToList res threadNo
              [
                 Pop regA
@@ -184,12 +181,12 @@ compileStat s@(SmtUnlock id) lut arp shared instr threadNo =
                   ownerAddr = addr + 2
 
 
-moveToSharedMemory :: [Expression] -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [Instruction]
+moveToSharedMemory :: [Expression] -> LookUpTable -> Int -> [(String, Int)] -> [Instruction]
 moveToSharedMemory exprs lut arp shared =
             concat (map (\x -> getVarToMem x lut shared) ids)
                     where ids = getIdsFromVars exprs
 
-moveFromSharedToLocal :: [Expression] -> [[(String, Integer, Statement, Integer)]] -> Int -> [(String, Int)] -> [Instruction]
+moveFromSharedToLocal :: [Expression] -> LookUpTable -> Int -> [(String, Int)] -> [Instruction]
 moveFromSharedToLocal exprs lut arp shared =
             concat (map (\x -> getVarToLocal x lut shared) ids)
                     where ids = getIdsFromVars exprs
@@ -233,7 +230,7 @@ findInShared id ((x, addr):shared) = if x == id then addr else findInShared id s
 
 ------------- COMPILE LIST EXPRESSION
 
-compileListExprs :: Int -> [Expression] -> [[(String, Integer, Statement, Integer)]] -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
+compileListExprs :: Int -> [Expression] -> LookUpTable -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
 compileListExprs arp [] lut shared instr threadNo = instr
 compileListExprs arp (e:exprs) lut shared instr threadNo = res
             where res = compileListExprs arp (exprs) lut shared (compileExpr arp e lut shared instr threadNo) threadNo
@@ -243,7 +240,7 @@ compileListExprs arp (e:exprs) lut shared instr threadNo = res
 
 ------------- COMPILE EXPRESSION
 
-compileExpr :: Int -> Expression -> [[(String, Integer, Statement, Integer)]] -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
+compileExpr :: Int -> Expression -> LookUpTable -> [(String, Int)] -> [[Instruction]] -> Int -> [[Instruction]]
 compileExpr arp (ExprConst a) lut shared instr threadNo =
         appendToList instr threadNo
         [
@@ -413,7 +410,7 @@ getPathToAR id lut =
             where n = getChangeInN id (reverse lut) (getFuncIndex (reverse lut))
 
 
-getChangeInN :: String -> [[(String, Integer, Statement, Integer)]] -> Integer -> Int
+getChangeInN :: String -> LookUpTable -> Integer -> Int
 getChangeInN id [] n = 0
 getChangeInN id ([]:xss) n = getChangeInN id (xss) n
 getChangeInN id (((a,b,c,d):xs):xss) currentN

@@ -6,7 +6,16 @@ import Data.Functor
 import Data.Either
 import Debug.Trace
 
-generateLutSt :: Statement -> [[(String, Integer, Statement, Integer)]] -> [[(String, Integer, Statement, Integer)]]
+
+type ID = String
+type Offset = Integer
+type FunctionIndexInLUT = Integer
+
+type Entry = (ID, Offset, Statement, FunctionIndexInLUT)
+type LookUpScope = [Entry]
+type LookUpTable = [LookUpScope]
+
+generateLutSt :: Statement -> LookUpTable -> LookUpTable
 generateLutSt s@(SmtDef (VariableDef _ a e)) lut = newlut
             where n = (getFuncIndex (reverse lut))
                   offset = (calcLocalDataSize n lut) + 1 -- points to the caller's arp
@@ -41,7 +50,7 @@ generateLutEx (ExprCall s exprs) lut = lut ++ [defs]
 
 generateLutEx _ lut = lut
 
-generateDefsForParams :: [Expression] -> [Param] -> [[(String, Integer, Statement, Integer)]] -> Integer -> [(String, Integer, Statement, Integer)]
+generateDefsForParams :: [Expression] -> [Param] -> LookUpTable -> Integer -> LookUpScope
 generateDefsForParams [] [] lut n = []
 generateDefsForParams (e:exprs) p@((Param a id):params) lut n = (id, offset, (SmtDef (VariableDef a id e)), n) : generateDefsForParams exprs params lut n
         where offset = toInteger (negate (2 + (length p)))
@@ -60,12 +69,12 @@ helpCalcLocalData (((_,_,_,_):xs):xss) = 0 + helpCalcLocalData (xs:xss)
 calcLocalDataSize n lut = helpCalcLocalData b
             where (_,b) = splitAt (fromIntegral n) lut
 
-getStatementFromLut :: Int -> String -> [[(String, Integer, Statement, Integer)]] -> Statement
+getStatementFromLut :: Int -> String -> LookUpTable -> Statement
 getStatementFromLut n id lut = helperGetStatement newlut id
             where newlut = reverse (fst (splitAt (n+1) lut))
 
 
-helperGetStatement :: [[(String, Integer, Statement, Integer)]] -> String -> Statement
+helperGetStatement :: LookUpTable -> String -> Statement
 helperGetStatement [] id = error("helperGetStatement can't find " ++ id)
 helperGetStatement ([]:xss) id = helperGetStatement xss id
 helperGetStatement (((a,_,c,_):xs):xss) id

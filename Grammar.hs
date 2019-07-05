@@ -10,60 +10,6 @@ import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 
 
-{-
-
-program : definition *;
-
-definition : functionDef
-           | variableDef SEMI
-           | globalDef SEMI;
-
-// Variables
-variableDef : type identifier ASS expression;
-
-array : LSQBRACKET (item ',') * item RSQBRACKET;
-
-type: BOOLTYPE | INTTYPE | ARRTYPE;
-
-globalDef: GLOBAL (identifier ',')* identifier;
-
-// Functions
-functionDef : FUNCTION retType identifier LPAR params RPAR LBRACK statement+ RBRACK;
-
-retType: type | VOID;
-
-params: ((type identifier ',')* type identifier)*;
-
-
-// Language
-statement : defintion
-          | if
-          | while
-          | RETURN identifier
-          | expression;
-
-if: IF LPAR bool RPAR LBRACK statement * RBRACK (ELSE LBRACK statement * RBRACK )*;
-
-while: WHILE LPAR bool RPAR LBRACK statement * RBRACK;
-
-bool: expression ordering expression | identifier;
-
-ordering: LT | LE | EQ | NE | GT | GE;
-
-
-expression : term
-     | term ( '+' | '-' ) expression;
-
-term : factor
-     | factor '*' term;
-
-factor : INTEGER | BOOLEAN | array
-       | identifier LPAR ((arg ',')* arg) * RPAR
-       | identifier
-       | '(' expr ')';
-
--}
-
 data Program = Program [Statement]
                 deriving (Show)
 
@@ -113,27 +59,6 @@ data Expression = ExprConst Integer
           | ExprBin Expression Binary Expression
           | ExprCall String [Expression]
           deriving (Show, Eq)
-
-
-
--- data Expression =
---                   ExprTerm Term
---                 | ExprPlus Term Expression
---                 | ExprSub Term Expression
---                 | ExprBool Order Term Expression
---                 deriving (Show)
---
--- data Term = TermFact Factor
---           | TermMult Factor Term
---                 deriving (Show)
---
--- data Factor = FactorInt Integer
---             | FactorTrue ()
---             | FactorFalse ()
---             | FactorCall String [Expression]
---             | FactorId String
---             | FactorBrack Expression
---                 deriving (Show)
 
 fromLeft' :: Either l r -> l
 fromLeft' (Left x) = x -- Newer GHC versions contain a fromLeft :: l -> Either l r -> l

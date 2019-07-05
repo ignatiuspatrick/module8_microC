@@ -1,141 +1,36 @@
 # Final Project
 
-Final project for programming paradigms.
-[Sprockell](https://github.com/leonschoorl/sprockell/)
+Final project for programming paradigms by: 
 
+Jakub Orlinski - s18988956
 
+Patrick Ignatius Patrick - s1969048
 
-Write the report
-
-Add some comments - after examples
-
-Add tests and a automatic tester 
-
-Write example programs - now
-
-
-## Issue tracker
-add dummy def so threaded local stuff doesn't overwrite
-
-[+] - comments
-[+] - fork/join
-[+] - lock/unlock
-
-[ ] - arrays
-[+] - why do you need spaces between operators?
-[+] - complicated arithmetic
-[+] - and/or
-
-## Language features (goal)
- 
-### Data types
- - integers
- - booleans
- - arrays
- - strings
- 
-### Heap management
-
-Finding space on the heap to allocate to the process but no dealloc
-or garbage collection. We do have a heap management specifically for function.
-The heap is using offset as ARP that points to the parent scope
-
-### Expressions and variables
- - typed variables
- - nested scopes
- - compile-time check for being initialized
- - operations:
-    - +, -, *, ==, <=, >=
-
-### Statements
- - assignments (for arrays copy the contents)
- - if
- - while
- - !!! fix the function call problem as in the one explained in advanced.mc
- 
-### Concurrency
- - creating threads ([fork-join](https://en.wikipedia.org/wiki/Fork%E2%80%93join_model))
- - locking
- - nested forking but not forking in nested scopes
- - access to both local and global variables (annotate in language)
- - Sprockell multithreading, since the architecture does not support dynamic threading creation
- - Fork/join model in the architecture, forked thread could be forked again
- - Look through : WriteInstr, ReadInstr/Receive, and TestAndSet
-
-### Procedures
- - functions only
- 
- 
-### Code generation
-Add some self made instructions that generate some parts of Sprockell to
-make code generation easier.
-
-## Grammar
-
-```antlrv4
-grammar README;
-
-program : definition *;
-
-definition : functionDef
-           | variableDef SEMI
-           | globalDef SEMI;
-
-// Variables
-variableDef : type identifier ASS expression;
-
-array : LSQBRACKET (item ',') * item RSQBRACKET;
-
-type: BOOLTYPE | INTTYPE | ARRTYPE;
-
-globalDef: GLOBAL (identifier ',')* identifier;  
-
-// Functions
-functionDef : FUNCTION retType identifier LPAR params RPAR LBRACK statement+ RBRACK;
-
-retType: type | VOID;
-
-params: ((type identifier ',')* type identifier)*;
-
-
-// Language
-statement : defintion
-          | if
-          | while
-          | RETURN identifier
-          | expression;
-
-if: IF LPAR bool RPAR LBRACK statement * RBRACK (ELSE LBRACK statement * RBRACK )*;
-
-while: WHILE LPAR bool RPAR LBRACK statement * RBRACK;
-
-bool: expression ordering expression | identifier;
-
-ordering: LT | LE | EQ | NE | GT | GE;
-
-
-//TODO more work on making this not left-recursive and correctly associative
-expression : term
-     | term ( '+' | '-' ) expression;
-
-term : factor
-     | factor '*' term;
-
-factor : INTEGER | BOOLEAN | array
-       | identifier LPAR ((arg ',')* arg) * RPAR
-       | identifier
-       | '(' expr ')';
+# Usage
+To prepare the project for execution one should run the following
 
 ```
+cd sprockell/
+cabal install
+cd ..
+ghci Main.hs
+```
 
+Then inside Main.hs uncomment the lines as indicated on line 40,
+depending on your architecture.
 
-## Testing
+Then a couple of functions are at your disposal to use the language.
+`compileToFile <insert path to .mc file>` - this lets you automatically compile the file to an executable and run it.
+`parseFile <insert path to .mc file>` - this generates the IR or the program according to the microC language. 
+`testSuite` - runs all the tests defined in samplesWithExp and returns a single boolean that indicates if all tests passed
 
+#Explanation
+The reinstallation of sprockell is needed as the sample programs
+rely on more local data and shared memory than given by default.
+Therefore the only changes in that directory are in BasicFunction.hs
+where the constants are increased.
 
-
-
-
-## Sample programs
- - [Peterson's algorithm](https://en.wikipedia.org/wiki/Peterson%27s_algorithm)
- - ```An elementary banking system, consisting of several processes trying to transfer money simultaneously. Your implementation should ensure that concurrent transfers do not mess up the state of the bank account.```
- 
+The output of the compilation can be found in `output/`,
+the samples programs in `samples/` and the `tests/` directory 
+holds some of the files needed to run tests - they contain the
+expected output of the sample files.

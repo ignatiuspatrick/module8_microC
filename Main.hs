@@ -36,10 +36,15 @@ compileToFile path = do
                                writeFile outputPath (template ++ " " ++  str)
                                (_, Just bla, _, comp) <- createProcess (proc "ghc" [outputPath]) {std_out = CreatePipe, std_err = CreatePipe}
                                waitForProcess comp
+                               -- uncomment the following on Unix
 --                                callCommand ("chmod u+x " ++ compiledFile)
 --                                callCommand ("rm " ++ compiledFile ++ ".o")
 --                                callCommand ("rm " ++ compiledFile ++ ".hi")
 --                                callCommand ("rm " ++ compiledFile ++ ".hs")
+                               -- uncomment the following on Windows
+--                                callCommand ("rmdir " ++ compiledFile ++ ".o")
+--                                callCommand ("rmdir " ++ compiledFile ++ ".hi")
+--                                callCommand ("rmdir " ++ compiledFile ++ ".hs")
                                (_, Just stdout, _, cp) <- createProcess (proc compiledFile []) {std_out = CreatePipe}
                                waitForProcess cp
                                contents <- hGetContents stdout

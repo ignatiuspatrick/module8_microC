@@ -12,9 +12,6 @@ import Grammar
 import Control.Exception
 
 
-data ParseException = ParseException String
-                        deriving Show
-instance Exception ParseException
 
 -- Programs
 parseProgram = Program <$> (whiteSpace *> (many parseStatement))
@@ -84,14 +81,16 @@ parseBinary = BinaryAnd <$> reserved "&&"
 
 ----------------- TYPE CHECKING
 
+type Scope = [(String, Statement)]
+type NestedScopes = [Scope]
 
-initProg :: Program -> Either String [[(String, Statement)]] -> Either String [[(String, Statement)]]
+initProg :: Program -> Either String NestedScopes -> Either String NestedScopes
 initProg (Program ([])) scopes = scopes
 initProg (Program (x:xs)) (Right scopes) = initProg (Program xs) new
     where new = (initStatement x (Right scopes))
 initProg (Program (x:xs)) (Left err) = (Left err)
 
-initStatement :: Statement -> Either String [[(String, Statement)]] -> Either String [[(String, Statement)]]
+initStatement :: Statement -> Either String NestedScopes -> Either String NestedScopes
 initStatement stm@(SmtDef (VariableDef a id expr)) (Right scopes) =
                 if def == Left defNotFound
                 then (if checkExpr expr scopes (strFromType a)
@@ -175,7 +174,7 @@ initStatement stm@(SmtCall id exps) (Right scopes) =
 
 ----------------- EXPRESSION CHECKING
 
-checkExpr :: Expression -> [[(String, Statement)]] -> String -> Bool
+checkExpr :: Expression -> NestedScopes -> String -> Bool
 checkExpr (ExprConst a) scopes exprType = exprType == "int"
 checkExpr (ExprTrue _) scopes exprType = exprType == "boolean"
 checkExpr (ExprFalse _) scopes exprType = exprType == "boolean"
@@ -244,7 +243,7 @@ checkParams _ [] scopes = False
 checkParams [] _ scopes = False
 
 
-getDefinition :: String -> [[(String, Statement)]] -> Either String Statement
+getDefinition :: String -> NestedScopes -> Either String Statement
 getDefinition id scopes = getDefRec id (reverse scopes)
 getDefRec id [] = Left defNotFound
 getDefRec id ([]:xs) = getDefRec id (xs)
@@ -258,13 +257,13 @@ getTopLevelDefinition id scopes = maybeToRight defNotFound found
 
 
 -- Open scope and put in the first of the statements into it
-initScope :: [Statement] -> Either String [[(String, Statement)]] -> Either String [[(String, Statement)]]
+initScope :: [Statement] -> Either String NestedScopes -> Either String NestedScopes
 initScope _ (Left err) = Left err
 initScope [] (Right scopes) = Right (init scopes)
 initScope statements (Right scopes) = if isLeft folded then folded else Right (init (fromRight [[]] folded))
                        where folded = initializeStatements statements (Right scopes)
 
-initializeStatements :: [Statement] -> Either String [[(String, Statement)]] -> Either String [[(String, Statement)]]
+initializeStatements :: [Statement] -> Either String NestedScopes -> Either String NestedScopes
 initializeStatements [] (Right scopes) = (Right scopes)
 initializeStatements (s:statements) (Right scopes) = initializeStatements statements (initStatement s (Right scopes))
 initializeStatements (s:statements) (Left err) = Left err
