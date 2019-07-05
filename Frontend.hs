@@ -1,6 +1,7 @@
 module Frontend where
 
 import Data.List
+import Data.Either
 import Data.Char
 
 import Text.ParserCombinators.Parsec as Parsec
@@ -84,56 +85,66 @@ parseBinary = BinaryAnd <$> reserved "&&"
 ----------------- TYPE CHECKING
 
 
-initProg :: Program -> [[(String, Statement)]] -> Either String [[(String, Statement)]]
+initProg :: Program -> Either String [[(String, Statement)]] -> Either String [[(String, Statement)]]
 initProg (Program ([])) scopes = scopes
-initProg (Program (x:xs)) scopes = if (isLeft new) then Left "idk" else initProg (Program xs) (fromRight new [])
-    where new = (initStatement x scopes)
+initProg (Program (x:xs)) (Right scopes) = initProg (Program xs) new
+    where new = (initStatement x (Right scopes))
+initProg (Program (x:xs)) (Left err) = (Left err)
 
-initStatement :: Statement -> [[(String, Statement)]] -> Either String [[(String, Statement)]]
-initStatement stm@(SmtDef (VariableDef a id expr)) scopes =
+initStatement :: Statement -> Either String [[(String, Statement)]] -> Either String [[(String, Statement)]]
+initStatement stm@(SmtDef (VariableDef a id expr)) (Right scopes) =
                 if def == Left defNotFound
                 then (if checkExpr expr scopes (strFromType a)
-                    then (init scopes) ++ [((last scopes) ++ [(id, stm)])]
-                    else throw (ParseException ("Type error in variable definition! The definition of '" ++ id ++ "' is invalid.")))
-                else error ("Type error in variable definition! The identifier '" ++ id ++ "' has already been used.")
+                    then Right ((init scopes) ++ [((last scopes) ++ [(id, stm)])])
+                    else Left ("Type error in variable definition! The definition of '" ++ id ++ "' is invalid."))
+                else Left ("Type error in variable definition! The identifier '" ++ id ++ "' has already been used.")
                 where def = getTopLevelDefinition id scopes
 
-initStatement stm@(SmtDef (FunctionDef a id params statements)) scopes =
+initStatement stm@(SmtDef (FunctionDef a id params statements)) (Right scopes) =
         if def == (Left (defNotFound))
             then
                 if (a == VoidType ()) || (isReturnSmt (last statements))
                 then res
-                else error ("Type error in function definition! The function '" ++ id ++ "' has no return statement.")
-            else error ("Type error in function definition! The identifier '" ++ id ++ "' has already been used.")
+                else Left ("Type error in function definition! The function '" ++ id ++ "' has no return statement.")
+            else Left ("Type error in function definition! The identifier '" ++ id ++ "' has already been used.")
                 where def = getTopLevelDefinition id scopes
                       updated = ((init scopes) ++ [((last scopes) ++ [(id, stm)])]) ++ [[(id, stm)]]
                       func (Param t i) = if t == IntType ()                                               -- fake a definition
                                               then (i, (SmtDef (VariableDef t id (ExprConst 0))))
                                               else (i, (SmtDef (VariableDef t id (ExprTrue ()))))
-                      res = initScope statements ((init updated) ++ [((last updated) ++ (map func params))])
+                      res = initScope statements (Right ((init updated) ++ [((last updated) ++ (map func params))]))
 
-initStatement stm@(SmtIf e stm1 stm2) scopes =
+initStatement stm@(SmtIf e stm1 stm2) (Right scopes) =
+            if checkExpr e scopes "boolean"
+                then
+                    if isLeft res1
+                    then res1
+                    else res
+                else Left ("Type error in if condition!" )
+                where res = initScope stm2 (Right ((fromRight [] res1) ++ [[]]))
+                      res1 = (initScope stm1 (Right (scopes ++ [[]])))
+
+initStatement stm@(SmtWhile e stms) (Right scopes) =
             if checkExpr e scopes "boolean"
                 then res
-                else error ("Type error in if condition!" )
-                where res = initScope stm2 (res1 ++ [[]])
-                      res1 = (initScope stm1 (scopes ++ [[]]))
+                else Left ("Type error in while condition!")
+                where res = initScope stms (Right (scopes ++ [[]]))
 
-initStatement stm@(SmtWhile e stms) scopes =
-            if checkExpr e scopes "boolean"
-                then res
-                else error ("Type error in while condition!")
-                where res = initScope stms (scopes ++ [[]])
-
-initStatement stm@(SmtFork exprs s1 s2) scopes =
+initStatement stm@(SmtFork exprs s1 s2) (Right scopes) =
             if checkForkParams exprs scopes
             then
                 if checkForkLocks ids s1 && checkForkLocks ids s2
-                then scopes ++ res1 ++ res2
-                else error ("Locking a variable that wasn't moved!")
-            else error ("Fork arguments have not been initialized before!")
-            where res1 = initScope s1 lut
-                  res2 = initScope s2 lut
+                then
+                    if isLeft res1
+                    then res1
+                    else
+                        if isLeft res2
+                        then res2
+                        else Right (scopes ++ (fromRight [[]] res1) ++ (fromRight [[]] res2))
+                else Left ("Locking a variable that wasn't moved!")
+            else Left ("Fork arguments have not been initialized before!")
+            where res1 = initScope s1 (Right lut)
+                  res2 = initScope s2 (Right lut)
                   lut = [[] ++ (map (\(ExprVar x) -> let (Right def) = getDefinition x scopes in (x, def)) exprs)]
                   ids = getIdsFromVars exprs
 
@@ -143,20 +154,20 @@ initStatement stm@(SmtUnlock e) scopes = scopes
 
 initStatement stm@(SmtRet e) scopes = scopes
 
-initStatement stm@(SmtAss id e) scopes =
+initStatement stm@(SmtAss id e) (Right scopes) =
             if def /= (Left defNotFound) && checkExpr e scopes (strFromType t)
-                then scopes
-                else error ("Type error in assignment statement! Variable '" ++ id ++ "' was not defined.")
+                then Right scopes
+                else Left ("Type error in assignment statement! Variable '" ++ id ++ "' was not defined.")
                 where def = getDefinition id scopes
                       t = getTypeFromDef def
 
-initStatement stm@(SmtCall id exps) scopes =
+initStatement stm@(SmtCall id exps) (Right scopes) =
                     if def /= Left defNotFound
                     then
                         if checkParams exps params scopes
-                        then scopes
-                        else error ("Type mismatch in func call statement! The parameters do not fit the definition!")
-                    else error ("Type error in function call! Function '" ++ id ++ "' was not defined.")
+                        then (Right scopes)
+                        else Left ("Type mismatch in func call statement! The parameters do not fit the definition!")
+                    else Left ("Type error in function call! Function '" ++ id ++ "' was not defined.")
                       where def = getDefinition id scopes
                             params = getParamsFromDef def
                             t = getTypeFromDef def
@@ -186,7 +197,7 @@ checkExpr (ExprCall id xs) scopes exprType =
                      (if exprType == "int"
                          then t == IntType ()
                          else t == BoolType ())
-                else error ("Function definition for '" ++ id ++ "' not found!")
+                else False
                 where def = getDefinition id scopes
                       t = getTypeFromDef def
                       params = getParamsFromDef def
@@ -247,12 +258,16 @@ getTopLevelDefinition id scopes = maybeToRight defNotFound found
 
 
 -- Open scope and put in the first of the statements into it
-initScope [] scopes = init scopes
-initScope statements scopes = init folded
-                       where folded = initializeStatements statements scopes
+initScope :: [Statement] -> Either String [[(String, Statement)]] -> Either String [[(String, Statement)]]
+initScope _ (Left err) = Left err
+initScope [] (Right scopes) = Right (init scopes)
+initScope statements (Right scopes) = if isLeft folded then folded else Right (init (fromRight [[]] folded))
+                       where folded = initializeStatements statements (Right scopes)
 
-initializeStatements [] scopes = scopes
-initializeStatements (s:statements) scopes = initializeStatements statements (initStatement s scopes)
+initializeStatements :: [Statement] -> Either String [[(String, Statement)]] -> Either String [[(String, Statement)]]
+initializeStatements [] (Right scopes) = (Right scopes)
+initializeStatements (s:statements) (Right scopes) = initializeStatements statements (initStatement s (Right scopes))
+initializeStatements (s:statements) (Left err) = Left err
 
 
 getTypeFromDef (Right (SmtDef (VariableDef t id _))) = t
@@ -271,14 +286,19 @@ maybeToRight def (Nothing) = Left def
 
 defNotFound = "Definition not found!"
 
+fromRight b (Right x) = x
+fromRight b (Left _) = b
+
+fromLeft a (Left x) = x
+fromLeft a (Right _) = a
 
 ----------------- TEST
+testFront :: String -> Either String Program
+testFront p = if isLeft res then (Left (fromLeft "" res)) else (Right parsed)
+        where (Right parsed) = parse parseProgram [] p
+              res = testInit (parsed)
 
-testFront p = if isLeft res then par else Left "error"
-        where par@(Right parsed) = testParser p
-              res = testInit (par)
-
-testInit (Right p) = initProg p [[]]
+testInit p = initProg p (Right [[]])
 
 testParser p = parse parseProgram [] p
 
